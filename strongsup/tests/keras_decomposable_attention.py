@@ -16,46 +16,46 @@ from keras.layers.pooling import GlobalAveragePooling1D, GlobalMaxPooling1D
 from keras.layers import Merge
 
 
-def build_model(vectors, shape_utt, shape_path, settings):
+def build_model(shape_utt, shape_path, settings):
     '''Compile the model.'''
     max_length_utt, nr_hidden_utt, nr_class_utt = shape_utt
     max_length_path, nr_hidden_path, nr_class_path = shape_path
-    nr_hidden_output = min(nr_class_path,nr_class_utt)
+    nr_hidden_output = min(nr_hidden_utt,nr_hidden_path)
     
     # Declare inputs.
-    utterance_inp = Input(shape=(max_length_utt,), dtype='float32', name='words1')
-    path_inp = Input(shape=(max_length_path,), dtype='float32', name='words2')
+    utterance_inp = Input(shape=(max_length_utt,nr_hidden_utt,), dtype='float32', name='words1')
+    path_inp = Input(shape=(max_length_path,nr_hidden_path,), dtype='float32', name='words2')
 
     # Construct operations, which we'll chain together.
     # embed = _StaticEmbedding(vectors, max_length, nr_hidden, dropout=0.2, nr_tune=5000)
     if settings['gru_encode']:
-        encode_utt = _BiRNNEncoding(max_length_utt, nr_hidden_output, dropout=settings['dropout'])
-        encode_path = _BiRNNEncoding(max_length_path, nr_hidden_output, dropout=settings['dropout'])
+        encode_utt = _BiRNNEncoding(max_length_utt, nr_hidden_output,nr_hidden_utt, dropout=settings['dropout'])
+        encode_path = _BiRNNEncoding(max_length_path, nr_hidden_output,nr_hidden_path, dropout=settings['dropout'])
     attend = _Attention(max_length_utt, max_length_path, nr_hidden_output, dropout=settings['dropout'])
-    align = _SoftAlignment(max_length, nr_hidden)
-    compare = _Comparison(max_length, nr_hidden, dropout=settings['dropout'])
-    entail = _Entailment(nr_hidden, nr_class, dropout=settings['dropout'])
+    align = _SoftAlignment(nr_hidden_output)
+    compare = _Comparison(nr_hidden_output, dropout=settings['dropout'])
+    entail = _Entailment(nr_hidden_output, nr_class_utt, dropout=settings['dropout'])
 
     # Declare the model as a computational graph.
     # sent1 = embed(ids1) # Shape: (i, n)
     # sent2 = embed(ids2) # Shape: (j, n)
 
     if settings['gru_encode']:
-        sent1 = encode(sent1)
-        sent2 = encode(sent2)
+        sent1 = encode_utt(utterance_inp)
+        sent2 = encode_path(path_inp)
 
     attention = attend(sent1, sent2)  # Shape: (i, j)
 
-    align1 = align(sent2, attention)
-    align2 = align(sent1, attention, transpose=True)
+    align1 = align(sent2, attention, max_length_path)
+    align2 = align(sent1, attention, max_length_utt, transpose=True)
 
-    feats1 = compare(sent1, align1)
-    feats2 = compare(sent2, align2)
+    feats1 = compare(sent1, align1, max_length_utt)
+    feats2 = compare(sent2, align2, max_length_path)
 
     scores = entail(feats1, feats2)
 
     # Now that we have the input/output, we can construct the Model object...
-    model = Model(input=[ids1, ids2], output=[scores])
+    model = Model(input=[utterance_inp, path_inp], output=[scores])
 
     # ...Compile it...
     model.compile(
@@ -110,11 +110,11 @@ class _StaticEmbedding(object):
 
 
 class _BiRNNEncoding(object):
-    def __init__(self, max_length, nr_out, dropout=0.0):
+    def __init__(self, max_length, nr_out,nr_in, dropout=0.0):
         self.model = Sequential()
         self.model.add(Bidirectional(LSTM(nr_out, return_sequences=True,
                                          dropout_W=dropout, dropout_U=dropout),
-                                         input_shape=(max_length, nr_out)))
+                                         input_shape=(max_length, nr_in)))
         self.model.add(TimeDistributed(Dense(nr_out, activation='relu', init='he_normal')))
         self.model.add(TimeDistributed(Dropout(0.2)))
 
@@ -124,6 +124,8 @@ class _BiRNNEncoding(object):
 
 class _Attention(object):
     def __init__(self, max_length_utt, max_length_path, nr_hidden, dropout=0.0, L2=0.0, activation='relu'):
+        self.max_length_utt = max_length_utt
+        self.max_length_path = max_length_path
         self.model_utt = Sequential()
         self.model_utt.add(Dropout(dropout, input_shape=(nr_hidden,)))
         self.model_utt.add(
@@ -153,32 +155,30 @@ class _Attention(object):
         return merge(
                 [self.model_utt(sent1), self.model_path(sent2)],
                 mode=_outer,
-                output_shape=(self.max_length, self.max_length))
+                output_shape=(self.max_length_utt, self.max_length_path))
 
 
 class _SoftAlignment(object):
-    def __init__(self, max_length, nr_hidden):
-        self.max_length = max_length
+    def __init__(self, nr_hidden):
         self.nr_hidden = nr_hidden
 
-    def __call__(self, sentence, attention, transpose=False):
+    def __call__(self, sentence, attention, max_length, transpose=False):
         def _normalize_attention(attmat):
             att = attmat[0]
             mat = attmat[1]
             if transpose:
-                att = K.permute_dimensions(att,(0, 2, 1))
+                att = K.permute_dimensions(att, (0, 2, 1))
             # 3d softmax
             e = K.exp(att - K.max(att, axis=-1, keepdims=True))
             s = K.sum(e, axis=-1, keepdims=True)
             sm_att = e / s
             return K.batch_dot(sm_att, mat)
         return merge([attention, sentence], mode=_normalize_attention,
-                      output_shape=(self.max_length, self.nr_hidden)) # Shape: (i, n)
+                      output_shape=(max_length, self.nr_hidden)) # Shape: (i, n)
 
 
 class _Comparison(object):
-    def __init__(self, words, nr_hidden, L2=0.0, dropout=0.0):
-        self.words = words
+    def __init__(self, nr_hidden, L2=0.0, dropout=0.0):
         self.model = Sequential()
         self.model.add(Dropout(dropout, input_shape=(nr_hidden*2,)))
         self.model.add(Dense(nr_hidden, name='compare1',
@@ -190,10 +190,10 @@ class _Comparison(object):
         self.model.add(Activation('relu'))
         self.model = TimeDistributed(self.model)
 
-    def __call__(self, sent, align, **kwargs):
+    def __call__(self, sent, align, max_len, **kwargs):
         result = self.model(merge([sent, align], mode='concat')) # Shape: (i, n)
-        avged = GlobalAveragePooling1D()(result, mask=self.words)
-        maxed = GlobalMaxPooling1D()(result, mask=self.words)
+        avged = GlobalAveragePooling1D()(result, mask=max_len)
+        maxed = GlobalMaxPooling1D()(result, mask=max_len)
         merged = merge([avged, maxed])
         result = BatchNormalization()(merged)
         return result

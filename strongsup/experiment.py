@@ -220,7 +220,7 @@ class Experiment(gtd.ml.experiment.TFExperiment):
         return train_parse_model
 
     def _build_decoder(self, train_parse_model):
-        return Decoder(train_parse_model, self.config.decoder, self._domain, self.glove_embeddings,
+        return Decoder(train_parse_model, self.config, self._domain, self.glove_embeddings,
                        self._domain.fixed_predicates)
 
     @cached_property

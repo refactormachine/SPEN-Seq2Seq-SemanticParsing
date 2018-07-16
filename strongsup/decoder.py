@@ -4,6 +4,7 @@ import numpy as np
 
 from gtd.utils import flatten
 from strongsup.case_weighter import get_case_weighter
+from strongsup.tests.keras_decomposable_attention import build_model
 from strongsup.value_function import get_value_function, ValueFunctionExample
 
 
@@ -38,20 +39,27 @@ class Decoder(object):
         self._glove_embeddings = glove_embeddings
         self._parse_model = parse_model
         self._value_function = get_value_function(
-                config.value_function, parse_model.parse_model)
+                config.decoder.value_function, parse_model.parse_model)
         self._case_weighter = get_case_weighter(
-                config.case_weighter, parse_model.parse_model,
+                config.decoder.case_weighter, parse_model.parse_model,
                 self._value_function)
-        self._config = config
-        self._caching = config.inputs_caching
+        self._config = config.decoder
+        self._caching = config.decoder.inputs_caching
         self._domain = domain
         self._path_checker = domain.path_checker
 
+
         # Normalization and update policy
-        self._normalization = config.normalization
-        if config.normalization == NormalizationOptions.GLOBAL:
+        self._normalization = config.decoder.normalization
+        if config.decoder.normalization == NormalizationOptions.GLOBAL:
             raise ValueError('Global normalization is no longer supported.')
         self._predicate2index = self._build_predicate_dictionary(predicates)
+
+        shape_utt = (config.parse_model.utterance_embedder.utterance_length, config.parse_model.utterance_embedder.lstm_dim, 2)
+        shape_path = (config.parse_model.stack_embedder.max_list_size, len(self.predicate_dictionary), 2)
+        settings = {'lr': 0.001, 'dropout': 0.2, 'gru_encode': True}
+        self._decomposable = build_model(shape_utt, shape_path, settings)
+
 
         # Exploration policy
         # TODO: Resolve this circular import differently
@@ -214,14 +222,24 @@ class Decoder(object):
         # todo aggregate
 
         for beam in beams:
+            beam_batch = []
+            if(len(beam._paths) == 0):
+                break
+
+            y_hat = np.zeros((len(beam._paths), 2), dtype='int32')
+
+            utter_embds = []
+            for utter in beam._paths[0].context.utterances:
+                for token in utter._tokens:
+                    utter_embds += [self._glove_embeddings[token]]
+            utter_embds_np = np.array(utter_embds)
+
             for path in beam._paths:
                 decisions_one_hot = self.decisions_to_one_hot(path.decisions)
-                utter_path_embds = []
-                for utter in path.context.utterances:
-                    for token in utter._tokens:
-                        utter_path_embds += [self._glove_embeddings[token]]
-                utter_path_embds_np = np.array(utter_path_embds)
-                #  todo: Dvir Code Here!
+                beam_batch.append([utter_embds_np,decisions_one_hot])
+            self._decomposable.train_on_batch(beam_batch, y_hat)
+
+
 
         all_cases = []  # a list of ParseCases to give to ParseModel
         all_case_weights = [] # the weights associated with the cases
