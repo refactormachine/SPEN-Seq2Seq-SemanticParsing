@@ -46,8 +46,8 @@ def build_model(shape_utt, shape_path, settings):
 
     attention = attend(sent1, sent2)  # Shape: (i, j)
 
-    align1 = align(sent2, attention, max_length_path)
-    align2 = align(sent1, attention, max_length_utt, transpose=True)
+    align1 = align(sent2, attention, max_length_utt)
+    align2 = align(sent1, attention, max_length_path, transpose=True)
 
     feats1 = compare(sent1, align1, max_length_utt)
     feats2 = compare(sent2, align2, max_length_path)

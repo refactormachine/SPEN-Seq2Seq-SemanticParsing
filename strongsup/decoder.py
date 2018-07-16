@@ -66,10 +66,10 @@ class Decoder(object):
         # TODO: Resolve this circular import differently
         from strongsup.exploration_policy import get_exploration_policy
         self._test_exploration_policy = get_exploration_policy(
-                self, config.test_exploration_policy,
+                self, config.decoder.test_exploration_policy,
                 self._normalization, train=False)
         self._train_exploration_policy = get_exploration_policy(
-                self, config.train_exploration_policy,
+                self, config.decoder.train_exploration_policy,
                 self._normalization, train=True)
 
     @property
