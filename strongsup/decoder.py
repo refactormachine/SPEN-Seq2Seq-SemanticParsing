@@ -5,6 +5,7 @@ import numpy as np
 from gtd.utils import flatten
 from strongsup.case_weighter import get_case_weighter
 from strongsup.value_function import get_value_function, ValueFunctionExample
+from strongsup.value import check_denotation
 
 
 class NormalizationOptions(object):
@@ -213,8 +214,9 @@ class Decoder(object):
         # todo compare
         # todo aggregate
 
-        for beam in beams:
+        for example, beam in zip(examples, beams):
             for path in beam._paths:
+                is_correct_path = check_denotation(example.answer, path.finalized_denotation)
                 decisions_one_hot = self.decisions_to_one_hot(path.decisions)
                 utter_path_embds = []
                 for utter in path.context.utterances:
