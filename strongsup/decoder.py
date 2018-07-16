@@ -240,7 +240,7 @@ class Decoder(object):
             utter_embds_np = np.array(utter_embds)
 
             for idx, path in enumerate(beam._paths):
-                y_hat[idx, int(check_denotation(example.answer, path.finalized_denotation) == 'true')] = 1
+                y_hat[idx, (check_denotation(example.answer, path.finalized_denotation))*1] = 1
                 decisions_one_hot = self.decisions_to_one_hot(path.decisions)
 
                 # define variables to fetch
