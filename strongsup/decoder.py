@@ -1,6 +1,7 @@
 from collections import namedtuple
 
 import numpy as np
+import tensorflow as tf
 
 from gtd.utils import flatten
 from strongsup.case_weighter import get_case_weighter
@@ -34,7 +35,7 @@ class Decoder(object):
 
         Args:
             parse_model (TrainParseModel)
-            config (Config): The decoder section of the config
+            config (Config): The entire config
             domain (Domain)
         """
         self._glove_embeddings = glove_embeddings
@@ -49,7 +50,6 @@ class Decoder(object):
         self._domain = domain
         self._path_checker = domain.path_checker
 
-
         # Normalization and update policy
         self._normalization = config.decoder.normalization
         if config.decoder.normalization == NormalizationOptions.GLOBAL:
@@ -60,7 +60,6 @@ class Decoder(object):
         shape_path = (config.parse_model.stack_embedder.max_list_size, len(self.predicate_dictionary), 2)
         settings = {'lr': 0.001, 'dropout': 0.2, 'gru_encode': True}
         self._decomposable = build_model(shape_utt, shape_path, settings)
-
 
         # Exploration policy
         # TODO: Resolve this circular import differently
@@ -222,7 +221,7 @@ class Decoder(object):
         # todo compare
         # todo aggregate
 
-        for beam in beams:
+        for example, beam in zip(examples, beams):
             beam_batch = []
             if len(beam._paths) == 0:
                 break
@@ -238,10 +237,27 @@ class Decoder(object):
             for path in beam._paths:
                 is_correct_path = check_denotation(example.answer, path.finalized_denotation)
                 decisions_one_hot = self.decisions_to_one_hot(path.decisions)
-                beam_batch.append([utter_embds_np,decisions_one_hot])
+
+                # define variables to fetch
+                fetch = {
+                    'stack_embedder': self.parse_model._parse_model._stack_embedder.embeds,
+                }
+
+                # fetch variables
+                sess = tf.get_default_session()
+                if sess is None:
+                    raise ValueError('No default TensorFlow Session registered.')
+                feed = self.parse_model._parse_model._stack_embedder.inputs_to_feed_dict(path._cases)
+                result = sess.run(fetch, feed_dict=feed)
+                stack_embedder = result['stack_embedder']
+
+                utter_path_embds = []
+                for utter in path.context.utterances:
+                    for token in utter._tokens:
+                        utter_path_embds += [self._glove_embeddings[token]]
+                utter_path_embds_np = np.array(utter_path_embds)
+                beam_batch.append([utter_embds_np, decisions_one_hot])
             self._decomposable.train_on_batch(beam_batch, y_hat)
-
-
 
         all_cases = []  # a list of ParseCases to give to ParseModel
         all_case_weights = [] # the weights associated with the cases
