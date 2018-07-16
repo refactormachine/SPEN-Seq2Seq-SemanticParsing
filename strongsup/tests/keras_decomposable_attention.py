@@ -49,8 +49,8 @@ def build_model(shape_utt, shape_path, settings):
     align1 = align(sent2, attention, max_length_utt)
     align2 = align(sent1, attention, max_length_path, transpose=True)
 
-    feats1 = compare(sent1, align1, max_length_utt)
-    feats2 = compare(sent2, align2, max_length_path)
+    feats1 = compare(sent1, align1, max_length_utt, 0)
+    feats2 = compare(sent2, align2, max_length_path, 1)
 
     scores = entail(feats1, feats2)
 
@@ -179,19 +179,34 @@ class _SoftAlignment(object):
 
 class _Comparison(object):
     def __init__(self, nr_hidden, L2=0.0, dropout=0.0):
-        self.model = Sequential()
-        self.model.add(Dropout(dropout, input_shape=(nr_hidden*2,)))
-        self.model.add(Dense(nr_hidden, name='compare1',
+        self.model_utt = Sequential()
+        self.model_utt.add(Dropout(dropout, input_shape=(nr_hidden*2,)))
+        self.model_utt.add(Dense(nr_hidden, name='compare1',
             init='he_normal', W_regularizer=l2(L2)))
-        self.model.add(Activation('relu'))
-        self.model.add(Dropout(dropout))
-        self.model.add(Dense(nr_hidden, name='compare2',
+        self.model_utt.add(Activation('relu'))
+        self.model_utt.add(Dropout(dropout))
+        self.model_utt.add(Dense(nr_hidden, name='compare2',
                         W_regularizer=l2(L2), init='he_normal'))
-        self.model.add(Activation('relu'))
-        self.model = TimeDistributed(self.model)
+        self.model_utt.add(Activation('relu'))
+        self.model_utt = TimeDistributed(self.model_utt)
 
-    def __call__(self, sent, align, max_len, **kwargs):
-        result = self.model(merge([sent, align], mode='concat')) # Shape: (i, n)
+        self.model_path = Sequential()
+        self.model_path.add(Dropout(dropout, input_shape=(nr_hidden * 2,)))
+        self.model_path.add(Dense(nr_hidden, name='compare1',
+                             init='he_normal', W_regularizer=l2(L2)))
+        self.model_path.add(Activation('relu'))
+        self.model_path.add(Dropout(dropout))
+        self.model_path.add(Dense(nr_hidden, name='compare2',
+                             W_regularizer=l2(L2), init='he_normal'))
+        self.model_path.add(Activation('relu'))
+        self.model_path = TimeDistributed(self.model_path)
+
+    def __call__(self, sent, align, max_len, type, **kwargs):
+        if type == 0:
+            result = self.model_utt(merge([sent, align], mode='concat')) # Shape: (i, n)
+        else:
+            result = self.model_path(merge([sent, align], mode='concat')) # Shape: (i, n)
+
         avged = GlobalAveragePooling1D()(result, mask=max_len)
         maxed = GlobalMaxPooling1D()(result, mask=max_len)
         merged = merge([avged, maxed])

@@ -229,7 +229,7 @@ class Decoder(object):
         for example, beam in zip(examples, beams):
             beam_batch = []
             if len(beam._paths) == 0:
-                break
+                continue
 
             y_hat = np.zeros((len(beam._paths), 2), dtype='int32')
 
@@ -239,8 +239,8 @@ class Decoder(object):
                     utter_embds += [self._glove_embeddings[token]]
             utter_embds_np = np.array(utter_embds)
 
-            for path in beam._paths:
-                is_correct_path = check_denotation(example.answer, path.finalized_denotation)
+            for idx, path in enumerate(beam._paths):
+                y_hat[idx, int(check_denotation(example.answer, path.finalized_denotation) == 'true')] = 1
                 decisions_one_hot = self.decisions_to_one_hot(path.decisions)
 
                 # define variables to fetch
@@ -256,11 +256,6 @@ class Decoder(object):
                 result = sess.run(fetch, feed_dict=feed)
                 stack_embedder = result['stack_embedder']
 
-                utter_path_embds = []
-                for utter in path.context.utterances:
-                    for token in utter._tokens:
-                        utter_path_embds += [self._glove_embeddings[token]]
-                utter_path_embds_np = np.array(utter_path_embds)
                 beam_batch.append([utter_embds_np, decisions_one_hot])
             self._decomposable.train_on_batch(beam_batch, y_hat)
 
