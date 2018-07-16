@@ -254,7 +254,7 @@ class Decoder(object):
                     raise ValueError('No default TensorFlow Session registered.')
                 feed = self.parse_model._parse_model._stack_embedder.inputs_to_feed_dict(path._cases)
                 result = sess.run(fetch, feed_dict=feed)
-                stack_embedder = result['stack_embedder']
+                stack_embedder = result['stack_embedder']  # dim:96
 
                 beam_batch.append([utter_embds_np, decisions_one_hot])
             self._decomposable.train_on_batch(beam_batch, y_hat)
