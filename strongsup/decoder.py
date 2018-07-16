@@ -180,6 +180,15 @@ class Decoder(object):
         # sample a beam of logical forms for each example
         beams = self.predictions(examples, train=True)
 
+        # todo BILSTM (beams)
+
+        # Decompose.train(beams)
+
+
+        # todo Bi attention
+        # todo compare
+        # todo aggregate
+
         all_cases = []  # a list of ParseCases to give to ParseModel
         all_case_weights = [] # the weights associated with the cases
         for example, paths in zip(examples, beams):
