@@ -6,6 +6,7 @@ from gtd.utils import flatten
 from strongsup.case_weighter import get_case_weighter
 from strongsup.tests.keras_decomposable_attention import build_model
 from strongsup.value_function import get_value_function, ValueFunctionExample
+from strongsup.value import check_denotation
 
 
 class NormalizationOptions(object):
@@ -223,7 +224,7 @@ class Decoder(object):
 
         for beam in beams:
             beam_batch = []
-            if(len(beam._paths) == 0):
+            if len(beam._paths) == 0:
                 break
 
             y_hat = np.zeros((len(beam._paths), 2), dtype='int32')
@@ -235,6 +236,7 @@ class Decoder(object):
             utter_embds_np = np.array(utter_embds)
 
             for path in beam._paths:
+                is_correct_path = check_denotation(example.answer, path.finalized_denotation)
                 decisions_one_hot = self.decisions_to_one_hot(path.decisions)
                 beam_batch.append([utter_embds_np,decisions_one_hot])
             self._decomposable.train_on_batch(beam_batch, y_hat)
