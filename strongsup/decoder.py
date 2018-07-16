@@ -175,7 +175,7 @@ class Decoder(object):
             one_hot_decision = np.zeros(shape=len(pred_dict))
             one_hot_decision[pred_dict[decision.name]] = 1
             one_hot_decisions[i] = one_hot_decision
-        return one_hot_decisions
+        return np.array(one_hot_decisions)
 
     def score_breakdown(self, paths):
         """Return the logits for all (parse case, choice, scorer) tuples.
@@ -227,7 +227,7 @@ class Decoder(object):
         # todo aggregate
 
         for example, beam in zip(examples, beams):
-            beam_batch = []
+            beam_batch = [[],[]]
             if len(beam._paths) == 0:
                 continue
 
@@ -256,7 +256,9 @@ class Decoder(object):
                 result = sess.run(fetch, feed_dict=feed)
                 stack_embedder = result['stack_embedder']  # dim:96
 
-                beam_batch.append([utter_embds_np, decisions_one_hot])
+                beam_batch[0].append(utter_embds_np)
+                beam_batch[1].append(decisions_one_hot)
+            beam_batch = np.array(beam_batch)
             self._decomposable.train_on_batch(beam_batch, y_hat)
 
         all_cases = []  # a list of ParseCases to give to ParseModel
