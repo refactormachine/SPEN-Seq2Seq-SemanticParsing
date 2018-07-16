@@ -62,8 +62,7 @@ class TestSimpleDecode(object):
 
     @pytest.fixture
     def decoder(self, parse_model, config):
-        caching = False
-        return Decoder(parse_model, None, None, caching, config)
+        return Decoder(parse_model, config, None, None, None, 3, 3, 3)
 
     def test_initial_beam(self, decoder, context):
         beam = decoder.initial_beam(context)
@@ -83,8 +82,7 @@ class TestSimpleDecode(object):
     def test_advance_twice(self, config, context):
         logits = [math.log(1), math.log(2), math.log(4), math.log(3)]
         parse_model = DummyParseModel(logits)
-        caching = False
-        decoder = Decoder(parse_model, None, None, caching, config)
+        decoder = Decoder(parse_model, config, None, None, None, 3, 3, 3)
         beam = decoder.initial_beam(context)
         new_beams = decoder.advance([beam])
         parse_model.logits = [math.log(5), math.log(2), math.log(7), math.log(6)]

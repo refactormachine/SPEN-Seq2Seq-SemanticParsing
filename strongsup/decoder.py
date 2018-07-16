@@ -29,35 +29,40 @@ class Decoder(object):
         ParseCases to the TrainParseModel.
     """
 
-    def __init__(self, parse_model, config, domain,
-                 glove_embeddings, predicates):
+    def __init__(self, parse_model, config, domain, glove_embeddings, predicates,
+                 utter_len, lstm_dim, max_list_size):
         """Create a new decoder.
 
         Args:
             parse_model (TrainParseModel)
-            config (Config): The entire config
+            config (Config): The decoder section of the config
             domain (Domain)
+            glove_embeddings
+            predicates
+            utter_len
+            lstm_dim
+            max_list_size
         """
         self._glove_embeddings = glove_embeddings
         self._parse_model = parse_model
         self._value_function = get_value_function(
-                config.decoder.value_function, parse_model.parse_model)
+                config.value_function, parse_model.parse_model)
         self._case_weighter = get_case_weighter(
-                config.decoder.case_weighter, parse_model.parse_model,
+                config.case_weighter, parse_model.parse_model,
                 self._value_function)
-        self._config = config.decoder
-        self._caching = config.decoder.inputs_caching
+        self._config = config
+        self._caching = config.inputs_caching
         self._domain = domain
         self._path_checker = domain.path_checker
 
         # Normalization and update policy
-        self._normalization = config.decoder.normalization
-        if config.decoder.normalization == NormalizationOptions.GLOBAL:
+        self._normalization = config.normalization
+        if config.normalization == NormalizationOptions.GLOBAL:
             raise ValueError('Global normalization is no longer supported.')
         self._predicate2index = self._build_predicate_dictionary(predicates)
 
-        shape_utt = (config.parse_model.utterance_embedder.utterance_length, config.parse_model.utterance_embedder.lstm_dim, 2)
-        shape_path = (config.parse_model.stack_embedder.max_list_size, len(self.predicate_dictionary), 2)
+        shape_utt = (utter_len, lstm_dim, 2)
+        shape_path = (max_list_size, len(self.predicate_dictionary), 2)
         settings = {'lr': 0.001, 'dropout': 0.2, 'gru_encode': True}
         self._decomposable = build_model(shape_utt, shape_path, settings)
 
@@ -65,10 +70,10 @@ class Decoder(object):
         # TODO: Resolve this circular import differently
         from strongsup.exploration_policy import get_exploration_policy
         self._test_exploration_policy = get_exploration_policy(
-                self, config.decoder.test_exploration_policy,
+                self, config.test_exploration_policy,
                 self._normalization, train=False)
         self._train_exploration_policy = get_exploration_policy(
-                self, config.decoder.train_exploration_policy,
+                self, config.train_exploration_policy,
                 self._normalization, train=True)
 
     @property
