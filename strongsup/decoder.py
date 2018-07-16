@@ -54,6 +54,9 @@ class Decoder(object):
         self._caching = config.inputs_caching
         self._domain = domain
         self._path_checker = domain.path_checker
+        self._utter_len = utter_len
+        self._lstm_dim = lstm_dim
+        self._max_list_size = max_list_size
 
         # Normalization and update policy
         self._normalization = config.normalization
@@ -61,7 +64,8 @@ class Decoder(object):
             raise ValueError('Global normalization is no longer supported.')
         self._predicate2index = self._build_predicate_dictionary(predicates)
 
-        shape_utt = (utter_len, lstm_dim, 2)
+        # 100 is the glove embedding length per word
+        shape_utt = (utter_len, 100, 2)
         shape_path = (max_list_size, len(self.predicate_dictionary), 2)
         settings = {'lr': 0.001, 'dropout': 0.2, 'gru_encode': True}
         self._decomposable = build_model(shape_utt, shape_path, settings)
@@ -237,11 +241,12 @@ class Decoder(object):
             for utter in beam._paths[0].context.utterances:
                 for token in utter._tokens:
                     utter_embds += [self._glove_embeddings[token]]
-            utter_embds_np = np.array(utter_embds)
+            utter_embds_np = np.concatenate((np.array(utter_embds), np.full((1,self._utter_len-len(utter_embds)),-9999.)), axis=0)
 
             for idx, path in enumerate(beam._paths):
                 y_hat[idx, (check_denotation(example.answer, path.finalized_denotation))*1] = 1
                 decisions_one_hot = self.decisions_to_one_hot(path.decisions)
+                decisions_one_hot = np.concatenate((decisions_one_hot, np.full((1,self._max_list_size - len(decisions_one_hot)), -9999.)),axis=0)
 
                 # define variables to fetch
                 fetch = {
@@ -258,7 +263,8 @@ class Decoder(object):
 
                 beam_batch[0].append(utter_embds_np)
                 beam_batch[1].append(decisions_one_hot)
-            beam_batch = np.array(beam_batch)
+            beam_batch[0] = np.array(beam_batch[0])
+            beam_batch[1] = np.array(beam_batch[1])
             self._decomposable.train_on_batch(beam_batch, y_hat)
 
         all_cases = []  # a list of ParseCases to give to ParseModel
