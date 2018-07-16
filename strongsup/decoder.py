@@ -26,7 +26,7 @@ class Decoder(object):
         ParseCases to the TrainParseModel.
     """
 
-    def __init__(self, parse_model, config, domain):
+    def __init__(self, parse_model, config, domain, glove_embeddings):
         """Create a new decoder.
 
         Args:
@@ -34,6 +34,7 @@ class Decoder(object):
             config (Config): The decoder section of the config
             domain (Domain)
         """
+        self._glove_embeddings = glove_embeddings
         self._parse_model = parse_model
         self._value_function = get_value_function(
                 config.value_function, parse_model.parse_model)
@@ -188,6 +189,15 @@ class Decoder(object):
         # todo Bi attention
         # todo compare
         # todo aggregate
+
+        for beam in beams:
+            for path in beam._paths:
+                utter_path_embds = []
+                for utter in path.context.utterances:
+                    for token in utter._tokens:
+                        utter_path_embds += [self._glove_embeddings[token]]
+                utter_path_embds_np = np.array(utter_path_embds)
+                #  todo: Dvir Code Here!
 
         all_cases = []  # a list of ParseCases to give to ParseModel
         all_case_weights = [] # the weights associated with the cases
