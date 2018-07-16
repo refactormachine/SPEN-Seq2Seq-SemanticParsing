@@ -107,10 +107,6 @@ class Experiment(gtd.ml.experiment.TFExperiment):
     def glove_embeddings(self):
         return self._glove_embeddings
 
-    @glove_embeddings.setter
-    def glove_embeddings(self, glove_embeddings):
-        self._glove_embeddings = glove_embeddings
-
     def _build_train_parse_model(self):
         """Construct the TrainParseModel.
 
@@ -124,7 +120,7 @@ class Experiment(gtd.ml.experiment.TFExperiment):
 
         # Glove embeddings have embed_dim 100
         glove_embeddings = GloveEmbeddings(vocab_size=20000)
-        self.glove_embeddings = glove_embeddings
+        self._glove_embeddings = glove_embeddings
         type_embeddings = TypeEmbeddings(embed_dim=50, all_types=self._domain.all_types)
 
         # set up word embeddings
@@ -224,7 +220,8 @@ class Experiment(gtd.ml.experiment.TFExperiment):
         return train_parse_model
 
     def _build_decoder(self, train_parse_model):
-        return Decoder(train_parse_model, self.config.decoder, self._domain, self.glove_embeddings)
+        return Decoder(train_parse_model, self.config.decoder, self._domain, self.glove_embeddings,
+                       self._domain.fixed_predicates)
 
     @cached_property
     def _examples(self):

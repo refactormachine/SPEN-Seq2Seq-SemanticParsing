@@ -26,7 +26,8 @@ class Decoder(object):
         ParseCases to the TrainParseModel.
     """
 
-    def __init__(self, parse_model, config, domain, glove_embeddings):
+    def __init__(self, parse_model, config, domain,
+                 glove_embeddings, predicates):
         """Create a new decoder.
 
         Args:
@@ -50,6 +51,7 @@ class Decoder(object):
         self._normalization = config.normalization
         if config.normalization == NormalizationOptions.GLOBAL:
             raise ValueError('Global normalization is no longer supported.')
+        self._predicate2index = self._build_predicate_dictionary(predicates)
 
         # Exploration policy
         # TODO: Resolve this circular import differently
@@ -72,6 +74,17 @@ class Decoder(object):
     @property
     def domain(self):
         return self._domain
+
+    @property
+    def predicate_dictionary(self):
+        return self._predicate2index
+
+    @staticmethod
+    def _build_predicate_dictionary(predicates):
+        predicate_dict = {}
+        for i, predicate in enumerate(predicates):
+            predicate_dict[predicate.name] = i
+        return predicate_dict
 
     def exploration_policy(self, train):
         """Returns the train or test exploration policy depending on
@@ -141,6 +154,16 @@ class Decoder(object):
         exploration_policy = self.exploration_policy(train)
         return exploration_policy.get_intermediate_beams(examples, verbose)
 
+    def decisions_to_one_hot(self, decisions):
+        pred_dict = self.predicate_dictionary
+        one_hot_decisions = np.empty(shape=(len(decisions), len(pred_dict)))
+
+        for i, decision in enumerate(decisions):
+            one_hot_decision = np.zeros(shape=len(pred_dict))
+            one_hot_decision[pred_dict[decision.name]] = 1
+            one_hot_decisions[i] = one_hot_decision
+        return one_hot_decisions
+
     def score_breakdown(self, paths):
         """Return the logits for all (parse case, choice, scorer) tuples.
 
@@ -192,6 +215,7 @@ class Decoder(object):
 
         for beam in beams:
             for path in beam._paths:
+                decisions_one_hot = self.decisions_to_one_hot(path.decisions)
                 utter_path_embds = []
                 for utter in path.context.utterances:
                     for token in utter._tokens:
