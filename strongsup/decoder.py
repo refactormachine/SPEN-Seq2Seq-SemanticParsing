@@ -1,8 +1,8 @@
 from collections import namedtuple
 
 import numpy as np
-import tensorflow as tf
 
+from gtd.chrono import verboserate
 from gtd.utils import flatten
 from strongsup.case_weighter import get_case_weighter
 from strongsup.tests.keras_decomposable_attention import build_model
@@ -53,11 +53,10 @@ class Decoder(object):
         self._caching = config.inputs_caching
         self._domain = domain
         self._path_checker = domain.path_checker
-        self._utter_len = utter_len*5
+        self._utter_len = utter_len
         self._max_stack_size = max_stack_size
         self._train_step_count = 0
-        self._class_weight = {0: 1.,
-                        1: 5.}
+        self._class_weight = {0: 1., 1: 5.}
 
         # Normalization and update policy
         self._normalization = config.normalization
@@ -92,6 +91,10 @@ class Decoder(object):
     @property
     def domain(self):
         return self._domain
+
+    @property
+    def step(self):
+        return self._parse_model.step
 
     @property
     def predicate_dictionary(self):
@@ -157,9 +160,9 @@ class Decoder(object):
         """Return the final beams for a batch of contexts.
 
         Args:
-            contexts (list[Context]): a batch of Contexts
-            verbose (bool)
+            examples
             train (bool): If you're training or evaluating
+            verbose (bool)
 
         Returns:
             list[Beam]: a batch of Beams
@@ -219,62 +222,10 @@ class Decoder(object):
     # Training
 
     def train_step(self, examples):
-        self._train_step_count += 1
         # sample a beam of logical forms for each example
         beams = self.predictions(examples, train=True)
 
-        if self._train_step_count > 80:
-            for example, beam in zip(examples, beams):
-                beam_batch = [[], []]
-                if len(beam._paths) == 0:
-                    continue
-
-                y_hat = np.zeros((len(beam._paths), 2), dtype='int32')
-
-                utter_embds = []
-                for utter in beam._paths[0].context.utterances:
-                    for token in utter._tokens:
-                        utter_embds += [self._glove_embeddings[token]]
-                utter_embds = np.array(utter_embds)
-
-                utter_embds_np = np.concatenate((
-                    utter_embds,
-                    np.full((self._utter_len - len(utter_embds), 100), 0.)
-                ))
-
-                one_hot_vec_dim = len(self.predicate_dictionary)
-                for idx, path in enumerate(beam._paths):
-                    check_denote = int(check_denotation(example.answer, path.finalized_denotation))
-                    y_hat[idx, check_denote] = 1
-                    decisions_one_hot = self.decisions_to_one_hot(path.decisions)
-
-                    decisions_one_hot = np.concatenate((
-                        decisions_one_hot,
-                        np.full((self._max_stack_size - len(decisions_one_hot), one_hot_vec_dim), 0.)
-                    ))
-
-                    '''
-                    # define variables to fetch
-                    fetch = {
-                        'stack_embedder': self.parse_model._parse_model._stack_embedder.embeds,
-                    }
-    
-                    # fetch variables
-                    sess = tf.get_default_session()
-                    if sess is None:
-                        raise ValueError('No default TensorFlow Session registered.')
-                    feed = self.parse_model._parse_model._stack_embedder.inputs_to_feed_dict(path._cases)
-                    result = sess.run(fetch, feed_dict=feed)
-                    stack_embedder = result['stack_embedder']  # stack_embedder_dim:96
-                    '''
-
-                    beam_batch[0].append(utter_embds_np)
-                    beam_batch[1].append(decisions_one_hot)
-                beam_batch[0] = np.array(beam_batch[0])
-                beam_batch[1] = np.array(beam_batch[1])
-                self._decomposable.train_on_batch(beam_batch, y_hat,class_weight=self._class_weight)
-                if self._train_step_count % 100 == 0:
-                    print self._decomposable.predict(beam_batch,batch_size=len(beam_batch[0]),verbose=0)
+        self.train_decomposable_batches(beams, examples)
 
         all_cases = []  # a list of ParseCases to give to ParseModel
         all_case_weights = []  # the weights associated with the cases
@@ -305,6 +256,69 @@ class Decoder(object):
         self._parse_model.train_step(
                 cases_to_reinforce, weights_to_reinforce, caching=False)
 
-    @property
-    def step(self):
-        return self._parse_model.step
+    def train_decomposable_batches(self, beams, examples, verbose=False):
+        self._train_step_count += 1
+
+        if self._train_step_count < 80:
+            return
+
+        for example, beam in zip(examples, beams):
+            beam_batch = [[], []]
+            if len(beam._paths) == 0:
+                continue
+
+            y_hat = np.zeros((len(beam._paths), 2), dtype='int32')
+
+            utter_embds = []
+            for utter in beam._paths[0].context.utterances:
+                for token in utter._tokens:
+                    utter_embds += [self._glove_embeddings[token]]
+            utter_embds = np.array(utter_embds)
+
+            utter_embds_np = np.concatenate((
+                utter_embds,
+                np.full((self._utter_len - len(utter_embds), 100), 0.)
+            ))
+
+            one_hot_vec_dim = len(self.predicate_dictionary)
+
+            if verbose:
+                iterations = verboserate(enumerate(beam._paths), desc='Performing decompose of batches')
+            else:
+                iterations = enumerate(beam._paths)
+
+            for idx, path in iterations:
+                check_denote = int(check_denotation(example.answer, path.finalized_denotation))
+                y_hat[idx, check_denote] = 1
+                decisions_one_hot = self.decisions_to_one_hot(path.decisions)
+
+                decisions_one_hot = np.concatenate((
+                    decisions_one_hot,
+                    np.full((self._max_stack_size - len(decisions_one_hot), one_hot_vec_dim), 0.)
+                ))
+
+                '''
+                # define variables to fetch
+                fetch = {
+                    'stack_embedder': self.parse_model._parse_model._stack_embedder.embeds,
+                }
+
+                # fetch variables
+                sess = tf.get_default_session()
+                if sess is None:
+                    raise ValueError('No default TensorFlow Session registered.')
+                feed = self.parse_model._parse_model._stack_embedder.inputs_to_feed_dict(path._cases)
+                result = sess.run(fetch, feed_dict=feed)
+                stack_embedder = result['stack_embedder']  # stack_embedder_dim:96
+                '''
+
+                beam_batch[0].append(utter_embds_np)
+                beam_batch[1].append(decisions_one_hot)
+            beam_batch[0] = np.array(beam_batch[0])
+            beam_batch[1] = np.array(beam_batch[1])
+            output = self._decomposable.train_on_batch(beam_batch, y_hat, class_weight=self._class_weight)
+
+            if self._train_step_count % 100 == 0:
+                print '\nprediction: {}'.format(
+                    self._decomposable.predict(beam_batch, batch_size=len(beam_batch[0]), verbose=0))
+
