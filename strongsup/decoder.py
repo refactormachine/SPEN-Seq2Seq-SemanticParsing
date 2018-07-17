@@ -67,7 +67,7 @@ class Decoder(object):
 
         # 100 is the glove embedding length per word
         shape_utt = (self._utter_len, 100, 2)
-        shape_path = (max_stack_size, len(self.predicate_dictionary), 2)
+        shape_path = (self._max_stack_size, len(self.predicate_dictionary), 2)
         settings = {'lr': 0.001, 'dropout': 0.2, 'gru_encode': True}
         self._decomposable = build_model(shape_utt, shape_path, settings)
 
@@ -223,14 +223,6 @@ class Decoder(object):
         # sample a beam of logical forms for each example
         beams = self.predictions(examples, train=True)
 
-        # todo BILSTM (beams)
-
-        # Decompose.train(beams)
-
-
-        # todo Bi attention
-        # todo compare
-        # todo aggregate
         if self._train_step_count > 80:
             for example, beam in zip(examples, beams):
                 beam_batch = [[], []]
