@@ -63,8 +63,8 @@ class Decoder(object):
         self._predicate2index = self._build_predicate_dictionary(predicates)
 
         # 100 is the glove embedding length per word
-        shape_utt = (utter_len, 100, 2)
-        shape_path = (max_stack_size, len(self.predicate_dictionary), 2)
+        shape_utt = (self._utter_len, 100, 2)
+        shape_path = (self._max_stack_size, len(self.predicate_dictionary), 2)
         settings = {'lr': 0.001, 'dropout': 0.2, 'gru_encode': True}
         self._decomposable = build_model(shape_utt, shape_path, settings)
 
@@ -219,15 +219,6 @@ class Decoder(object):
         # sample a beam of logical forms for each example
         beams = self.predictions(examples, train=True)
 
-        # todo BILSTM (beams)
-
-        # Decompose.train(beams)
-
-
-        # todo Bi attention
-        # todo compare
-        # todo aggregate
-
         for example, beam in zip(examples, beams):
             beam_batch = [[], []]
             if len(beam._paths) == 0:
@@ -276,7 +267,7 @@ class Decoder(object):
                 beam_batch[1].append(decisions_one_hot)
             beam_batch[0] = np.array(beam_batch[0])
             beam_batch[1] = np.array(beam_batch[1])
-            self._decomposable.train_on_batch(beam_batch, y_hat)
+            output = self._decomposable.train_on_batch(beam_batch, y_hat)
 
         all_cases = []  # a list of ParseCases to give to ParseModel
         all_case_weights = []  # the weights associated with the cases

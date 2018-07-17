@@ -220,10 +220,14 @@ class Experiment(gtd.ml.experiment.TFExperiment):
         return train_parse_model
 
     def _build_decoder(self, train_parse_model):
+        utterance_length = self.config.parse_model.utterance_embedder.utterance_length
+        utterance_num = self.config.parse_model.utterance_embedder.utterance_num
+        iterations_per_utterance = self.config.decoder.train_exploration_policy.iterations_per_utterance
+
         return Decoder(train_parse_model, self.config.decoder, self._domain, self.glove_embeddings,
                        self._domain.fixed_predicates,
-                       self.config.parse_model.utterance_embedder.utterance_length,
-                       self.config.decoder.train_exploration_policy.iterations_per_utterance * 5  # todo: read 5 from config
+                       utterance_length * utterance_num,
+                       iterations_per_utterance * utterance_num
                        )
 
     @cached_property
