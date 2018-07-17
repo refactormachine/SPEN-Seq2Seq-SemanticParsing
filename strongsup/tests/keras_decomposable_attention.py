@@ -17,7 +17,7 @@ from keras.layers import Merge
 
 
 def build_model(shape_utt, shape_path, settings):
-    '''Compile the model.'''
+    """Compile the model."""
     max_length_utt, nr_hidden_utt, nr_class_utt = shape_utt
     max_length_path, nr_hidden_path, nr_class_path = shape_path
     nr_hidden_output = min(nr_hidden_utt,nr_hidden_path)
@@ -112,10 +112,10 @@ class _StaticEmbedding(object):
 class _BiRNNEncoding(object):
     def __init__(self, max_length, nr_out,nr_in, dropout=0.0):
         self.model = Sequential()
-        self.model.add(Masking(mask_value=-9999., input_shape=(max_length, nr_in)))
+        # self.model.add(Masking(mask_value=-9999., input_shape=(max_length, nr_in)))
         self.model.add(Bidirectional(LSTM(nr_out, return_sequences=True,
-                                         dropout_W=dropout, dropout_U=dropout),
-                                         ))
+                                          dropout_W=dropout, dropout_U=dropout),
+                                     input_shape=(max_length, nr_in)))
         self.model.add(TimeDistributed(Dense(nr_out, activation='relu', init='he_normal')))
         self.model.add(TimeDistributed(Dropout(0.2)))
 
@@ -131,8 +131,8 @@ class _Attention(object):
         self.model_utt.add(Dropout(dropout, input_shape=(nr_hidden,)))
         self.model_utt.add(
             Dense(nr_hidden, name='attend1',
-                init='he_normal', W_regularizer=l2(L2),
-                input_shape=(nr_hidden,), activation='relu'))
+                  init='he_normal', W_regularizer=l2(L2),
+                  input_shape=(nr_hidden,), activation='relu'))
         self.model_utt.add(Dropout(dropout))
         self.model_utt.add(Dense(nr_hidden, name='attend2',
                                  init='he_normal', W_regularizer=l2(L2), activation='relu'))
@@ -146,7 +146,7 @@ class _Attention(object):
                   input_shape=(nr_hidden,), activation='relu'))
         self.model_path.add(Dropout(dropout))
         self.model_path.add(Dense(nr_hidden, name='attend4',
-                                 init='he_normal', W_regularizer=l2(L2), activation='relu'))
+                                  init='he_normal', W_regularizer=l2(L2), activation='relu'))
         self.model_path = TimeDistributed(self.model_path)
 
     def __call__(self, sent1, sent2):
@@ -175,7 +175,7 @@ class _SoftAlignment(object):
             sm_att = e / s
             return K.batch_dot(sm_att, mat)
         return merge([attention, sentence], mode=_normalize_attention,
-                      output_shape=(max_length, self.nr_hidden)) # Shape: (i, n)
+                     output_shape=(max_length, self.nr_hidden)) # Shape: (i, n)
 
 
 class _Comparison(object):
@@ -183,22 +183,22 @@ class _Comparison(object):
         self.model_utt = Sequential()
         self.model_utt.add(Dropout(dropout, input_shape=(nr_hidden*2,)))
         self.model_utt.add(Dense(nr_hidden, name='compare1',
-            init='he_normal', W_regularizer=l2(L2)))
+                                 init='he_normal', W_regularizer=l2(L2)))
         self.model_utt.add(Activation('relu'))
         self.model_utt.add(Dropout(dropout))
         self.model_utt.add(Dense(nr_hidden, name='compare2',
-                        W_regularizer=l2(L2), init='he_normal'))
+                                 W_regularizer=l2(L2), init='he_normal'))
         self.model_utt.add(Activation('relu'))
         self.model_utt = TimeDistributed(self.model_utt)
 
         self.model_path = Sequential()
         self.model_path.add(Dropout(dropout, input_shape=(nr_hidden * 2,)))
         self.model_path.add(Dense(nr_hidden, name='compare1',
-                             init='he_normal', W_regularizer=l2(L2)))
+                                  init='he_normal', W_regularizer=l2(L2)))
         self.model_path.add(Activation('relu'))
         self.model_path.add(Dropout(dropout))
         self.model_path.add(Dense(nr_hidden, name='compare2',
-                             W_regularizer=l2(L2), init='he_normal'))
+                                  W_regularizer=l2(L2), init='he_normal'))
         self.model_path.add(Activation('relu'))
         self.model_path = TimeDistributed(self.model_path)
 
@@ -213,6 +213,74 @@ class _Comparison(object):
         merged = merge([avged, maxed])
         result = BatchNormalization()(merged)
         return result
+
+
+class GlobalAveragePooling1DMasked(Layer):
+    def __init__(self, **kwargs):
+        self.supports_masking = True
+        super(GlobalAveragePooling1DMasked, self).__init__(**kwargs)
+
+    def compute_mask(self, input, input_mask=None):
+        # do not pass the mask to the next layers
+        return None
+
+    def call(self, x, mask=None):
+        if mask is not None:
+            # mask (batch, time)
+            mask = K.cast(mask, K.floatx())
+            # mask (batch, x_dim, time)
+            mask = K.repeat(mask, x.get_shape()[-1])
+            # mask (batch, time, x_dim)
+            mask = K.tf.transpose(mask, [0,2,1])
+            # x = x * mask
+        return K.sum(x, axis=1)
+
+    def compute_output_shape(self, input_shape):
+        # remove temporal dimension
+        return input_shape[0], input_shape[2]
+
+
+class GlobalMaxPooling1DMasked(Layer):
+    def __init__(self, **kwargs):
+        self.supports_masking = True
+        super(GlobalMaxPooling1DMasked, self).__init__(**kwargs)
+
+    def compute_mask(self, input, input_mask=None):
+        # do not pass the mask to the next layers
+        return None
+
+    def call(self, x, mask=None):
+        if mask is not None:
+            # mask (batch, time)
+            mask = K.cast(mask, K.floatx())
+            # mask (batch, x_dim, time)
+            mask = K.repeat(mask, x.get_shape()[-1])
+            # mask (batch, time, x_dim)
+            mask = K.tf.transpose(mask, [0, 2, 1])
+            x = x * mask
+        return K.max(x, axis=1)
+
+    def compute_output_shape(self, input_shape):
+        # remove temporal dimension
+        return input_shape[0], input_shape[2]
+
+
+# class GlobalAveragePooling1DMasked(GlobalAveragePooling1D):
+#     def call(self, x, mask=None):
+#         if mask != None:
+#             return K.sum(x, axis=1) / K.sum(K.tf.to_float(mask), axis=1)
+#         else:
+#             return GlobalAveragePooling1D().call(x)
+
+
+# class GlobalMaxPooling1DMasked(GlobalMaxPooling1D):
+#     def call(self, x, mask=None):
+#         if mask != None:
+#             return K.max(x, axis=1)
+#         else:
+#             return GlobalAveragePooling1D().call(x)
+
+
 
 
 class _Entailment(object):
