@@ -1,8 +1,9 @@
+import sys
 from collections import namedtuple
 
+import tensorflow as tf
 import numpy as np
 
-from gtd.chrono import verboserate
 from gtd.utils import flatten
 from strongsup.case_weighter import get_case_weighter
 from strongsup.tests.keras_decomposable_attention import build_model
@@ -30,7 +31,7 @@ class Decoder(object):
     """
 
     def __init__(self, parse_model, config, domain, glove_embeddings, predicates,
-                 utter_len, max_stack_size):
+                 utter_len, max_stack_size, train_one_hot=True):
         """Create a new decoder.
 
         Args:
@@ -57,6 +58,7 @@ class Decoder(object):
         self._max_stack_size = max_stack_size
         self._train_step_count = 0
         self._class_weight = {0: 1., 1: 5.}
+        self._train_one_hot = train_one_hot
 
         # Normalization and update policy
         self._normalization = config.normalization
@@ -66,7 +68,7 @@ class Decoder(object):
 
         # 100 is the glove embedding length per word
         shape_utt = (self._utter_len, 100, 2)
-        shape_path = (self._max_stack_size, len(self.predicate_dictionary), 2)
+        shape_path = (self._max_stack_size, len(self.predicate_dictionary), 2) if self._train_one_hot else (self._max_stack_size, 96, 2)
         settings = {'lr': 0.001, 'dropout': 0.2, 'gru_encode': True}
         self._decomposable = build_model(shape_utt, shape_path, settings)
 
@@ -225,7 +227,10 @@ class Decoder(object):
         # sample a beam of logical forms for each example
         beams = self.predictions(examples, train=True)
 
-        self.train_decomposable_batches(beams, examples)
+        if self._train_one_hot:
+            self.train_decomposable_batches_one_hot(beams, examples)
+        else:
+            self.train_decomposable_batches_on_stack(beams, examples)
 
         all_cases = []  # a list of ParseCases to give to ParseModel
         all_case_weights = []  # the weights associated with the cases
@@ -256,7 +261,7 @@ class Decoder(object):
         self._parse_model.train_step(
                 cases_to_reinforce, weights_to_reinforce, caching=False)
 
-    def train_decomposable_batches(self, beams, examples, verbose=False):
+    def train_decomposable_batches_one_hot(self, beams, examples):
         self._train_step_count += 1
 
         if self._train_step_count < 80:
@@ -282,12 +287,7 @@ class Decoder(object):
 
             one_hot_vec_dim = len(self.predicate_dictionary)
 
-            if verbose:
-                iterations = verboserate(enumerate(beam._paths), desc='Performing decompose of batches')
-            else:
-                iterations = enumerate(beam._paths)
-
-            for idx, path in iterations:
+            for idx, path in enumerate(beam._paths):
                 check_denote = int(check_denotation(example.answer, path.finalized_denotation))
                 y_hat[idx, check_denote] = 1
                 decisions_one_hot = self.decisions_to_one_hot(path.decisions)
@@ -297,7 +297,46 @@ class Decoder(object):
                     np.full((self._max_stack_size - len(decisions_one_hot), one_hot_vec_dim), 0.)
                 ))
 
-                '''
+                beam_batch[0].append(utter_embds_np)
+                beam_batch[1].append(decisions_one_hot)
+            beam_batch[0] = np.array(beam_batch[0])
+            beam_batch[1] = np.array(beam_batch[1])
+            output = self._decomposable.train_on_batch(beam_batch, y_hat, class_weight=self._class_weight)
+
+            if self._train_step_count % 100 == 0:
+                print >> sys.stderr, '\rprediction: \r{}\routput: {} \033[F'.format(
+                    self._decomposable.predict(beam_batch, batch_size=len(beam_batch[0]), verbose=0),
+                    output
+                )
+
+    def train_decomposable_batches_on_stack(self, beams, examples):
+        self._train_step_count += 1
+
+        if self._train_step_count < 80:
+            return
+
+        for example, beam in zip(examples, beams):
+            beam_batch = [[], []]
+            if len(beam._paths) == 0:
+                continue
+
+            y_hat = np.zeros((len(beam._paths), 2), dtype='int32')
+
+            utter_embds = []
+            for utter in beam._paths[0].context.utterances:
+                for token in utter._tokens:
+                    utter_embds += [self._glove_embeddings[token]]
+            utter_embds = np.array(utter_embds)
+
+            utter_embds = np.concatenate((
+                utter_embds,
+                np.full((self._utter_len - len(utter_embds), 100), 0.)
+            ))
+
+            for idx, path in enumerate(beam._paths):
+                check_denote = int(check_denotation(example.answer, path.finalized_denotation))
+                y_hat[idx, check_denote] = 1
+
                 # define variables to fetch
                 fetch = {
                     'stack_embedder': self.parse_model._parse_model._stack_embedder.embeds,
@@ -310,15 +349,21 @@ class Decoder(object):
                 feed = self.parse_model._parse_model._stack_embedder.inputs_to_feed_dict(path._cases)
                 result = sess.run(fetch, feed_dict=feed)
                 stack_embedder = result['stack_embedder']  # stack_embedder_dim:96
-                '''
 
-                beam_batch[0].append(utter_embds_np)
-                beam_batch[1].append(decisions_one_hot)
+                stack_embedder = np.concatenate((
+                    stack_embedder,
+                    np.full((self._max_stack_size - len(stack_embedder), 96), 0.)
+                ))
+
+                beam_batch[0].append(utter_embds)
+                beam_batch[1].append(stack_embedder)
             beam_batch[0] = np.array(beam_batch[0])
             beam_batch[1] = np.array(beam_batch[1])
+
             output = self._decomposable.train_on_batch(beam_batch, y_hat, class_weight=self._class_weight)
 
-            if self._train_step_count % 100 == 0:
-                print '\nprediction: {}'.format(
-                    self._decomposable.predict(beam_batch, batch_size=len(beam_batch[0]), verbose=0))
-
+            if self._train_step_count % 10 == 0:
+                print >> sys.stderr, '\rprediction: \r{}\routput: {} \033[F'.format(
+                    self._decomposable.predict(beam_batch, batch_size=len(beam_batch[0]), verbose=0),
+                    output
+                )
