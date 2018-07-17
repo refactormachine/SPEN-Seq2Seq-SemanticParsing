@@ -30,7 +30,7 @@ class Decoder(object):
     """
 
     def __init__(self, parse_model, config, domain, glove_embeddings, predicates,
-                 utter_len, lstm_dim, max_list_size):
+                 utter_len, max_stack_size):
         """Create a new decoder.
 
         Args:
@@ -40,8 +40,7 @@ class Decoder(object):
             glove_embeddings
             predicates
             utter_len
-            lstm_dim
-            max_list_size
+            max_stack_size
         """
         self._glove_embeddings = glove_embeddings
         self._parse_model = parse_model
@@ -55,8 +54,7 @@ class Decoder(object):
         self._domain = domain
         self._path_checker = domain.path_checker
         self._utter_len = utter_len
-        self._lstm_dim = lstm_dim
-        self._max_list_size = max_list_size
+        self._max_stack_size = max_stack_size
 
         # Normalization and update policy
         self._normalization = config.normalization
@@ -66,7 +64,7 @@ class Decoder(object):
 
         # 100 is the glove embedding length per word
         shape_utt = (utter_len, 100, 2)
-        shape_path = (max_list_size, len(self.predicate_dictionary), 2)
+        shape_path = (max_stack_size, len(self.predicate_dictionary), 2)
         settings = {'lr': 0.001, 'dropout': 0.2, 'gru_encode': True}
         self._decomposable = build_model(shape_utt, shape_path, settings)
 
@@ -231,7 +229,7 @@ class Decoder(object):
         # todo aggregate
 
         for example, beam in zip(examples, beams):
-            beam_batch = [[],[]]
+            beam_batch = [[], []]
             if len(beam._paths) == 0:
                 continue
 
@@ -241,13 +239,25 @@ class Decoder(object):
             for utter in beam._paths[0].context.utterances:
                 for token in utter._tokens:
                     utter_embds += [self._glove_embeddings[token]]
-            utter_embds_np = np.concatenate((np.array(utter_embds), np.full((1,self._utter_len-len(utter_embds)),-9999.)), axis=0)
+            utter_embds = np.array(utter_embds)
 
+            utter_embds_np = np.concatenate((
+                utter_embds,
+                np.full((self._utter_len - len(utter_embds), 100), 0.)
+            ))
+
+            one_hot_vec_dim = len(self.predicate_dictionary)
             for idx, path in enumerate(beam._paths):
-                y_hat[idx, (check_denotation(example.answer, path.finalized_denotation))*1] = 1
+                check_denote = int(check_denotation(example.answer, path.finalized_denotation))
+                y_hat[idx, check_denote] = 1
                 decisions_one_hot = self.decisions_to_one_hot(path.decisions)
-                decisions_one_hot = np.concatenate((decisions_one_hot, np.full((1,self._max_list_size - len(decisions_one_hot)), -9999.)),axis=0)
 
+                decisions_one_hot = np.concatenate((
+                    decisions_one_hot,
+                    np.full((self._max_stack_size - len(decisions_one_hot), one_hot_vec_dim), 0.)
+                ))
+
+                '''
                 # define variables to fetch
                 fetch = {
                     'stack_embedder': self.parse_model._parse_model._stack_embedder.embeds,
@@ -259,7 +269,8 @@ class Decoder(object):
                     raise ValueError('No default TensorFlow Session registered.')
                 feed = self.parse_model._parse_model._stack_embedder.inputs_to_feed_dict(path._cases)
                 result = sess.run(fetch, feed_dict=feed)
-                stack_embedder = result['stack_embedder']  # dim:96
+                stack_embedder = result['stack_embedder']  # stack_embedder_dim:96
+                '''
 
                 beam_batch[0].append(utter_embds_np)
                 beam_batch[1].append(decisions_one_hot)
@@ -268,7 +279,7 @@ class Decoder(object):
             self._decomposable.train_on_batch(beam_batch, y_hat)
 
         all_cases = []  # a list of ParseCases to give to ParseModel
-        all_case_weights = [] # the weights associated with the cases
+        all_case_weights = []  # the weights associated with the cases
         for example, paths in zip(examples, beams):
             case_weights = self._case_weighter(paths, example)
             case_weights = flatten(case_weights)

@@ -205,17 +205,17 @@ class Experiment(gtd.ml.experiment.TFExperiment):
             return scorer
 
         parse_model = ParseModel(pred_embedder, history_embedder, stack_embedder,
-                utterance_embedder, scorer_factory, config.h_dims,
-                self._domain, delexicalized)
+                                 utterance_embedder, scorer_factory, config.h_dims,
+                                 self._domain, delexicalized)
 
         if self.config.decoder.normalization == 'local':
             loss_model_factory = CrossEntropyLossModel
         else:
             loss_model_factory = LogitLossModel
         train_parse_model = TrainParseModel(parse_model, loss_model_factory,
-                self.config.learning_rate,
-                OptimizerOptions(self.config.optimizer),
-                self.config.get('train_batch_size'))
+                                            self.config.learning_rate,
+                                            OptimizerOptions(self.config.optimizer),
+                                            self.config.get('train_batch_size'))
 
         return train_parse_model
 
@@ -223,8 +223,8 @@ class Experiment(gtd.ml.experiment.TFExperiment):
         return Decoder(train_parse_model, self.config.decoder, self._domain, self.glove_embeddings,
                        self._domain.fixed_predicates,
                        self.config.parse_model.utterance_embedder.utterance_length,
-                       self.config.parse_model.utterance_embedder.lstm_dim,
-                       self.config.parse_model.stack_embedder.max_list_size)
+                       self.config.decoder.train_exploration_policy.iterations_per_utterance * 5  # todo: read 5 from config
+                       )
 
     @cached_property
     def _examples(self):
@@ -327,7 +327,7 @@ class Experiment(gtd.ml.experiment.TFExperiment):
         def report_loss(cases, name):
             weights = [1.0] * len(cases)
             loss = train_parse_model.compute(train_parse_model.loss, cases, weights,
-                    caching=self.config.decoder.inputs_caching)
+                                             caching=self.config.decoder.inputs_caching)
             self.tb_logger.log(name, loss, step)
 
         report_loss(case_sample(self.train_examples), 'loss_train')
@@ -338,10 +338,10 @@ class Experiment(gtd.ml.experiment.TFExperiment):
         num_examples = self.config.num_evaluate_examples
         with random_seed(0):
             train_sample = sample_if_large(self.train_examples, num_examples,
-                    replace=False)
+                                           replace=False)
         with random_seed(0):
             valid_sample = sample_if_large(self.valid_examples, num_examples,
-                    replace=False)
+                                           replace=False)
         train_eval = self.evaluate_on_examples(step, train_sample, self.train_visualizer)
         valid_eval = self.evaluate_on_examples(step, valid_sample, self.valid_visualizer)
 
