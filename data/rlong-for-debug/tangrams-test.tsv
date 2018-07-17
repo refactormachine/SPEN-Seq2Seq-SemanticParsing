@@ -1,0 +1,2 @@
+test-439	1:1 2:4 3:0 4:3 5:2	switch 1st and 3rd figures	1:0 2:4 3:1 4:3 5:2	remove 1st figure	1:4 2:1 3:3 4:2	add it back	1:0 2:4 3:1 4:3 5:2	switch 1st and 5th figures	1:2 2:4 3:1 4:3 5:0	remove 2nd figure	1:2 2:1 3:3 4:0
+test-448	1:1 2:4 3:0 4:3 5:2	swap third and forth objects	1:1 2:4 3:3 4:0 5:2	swap first and second objects	1:0 2:4 3:3 4:1 5:2	swap first and second objects	1:1 2:4 3:3 4:0 5:2	remove third object	1:1 2:4 3:0 4:2	remove third object	1:1 2:4 3:2

@@ -1,0 +1,3 @@
+train-437	1:2 2:1 3:4 4:0 5:3	delete the second object from the left	1:2 2:4 3:0 4:3	delete the leftmost object	1:4 2:0 3:3	swap the leftmost and the rightmost objects	1:3 2:0 3:4	swap them again	1:4 2:0 3:3	add back the object we removed on step 1	1:1 2:4 3:0 4:3
+train-438	1:0 2:2 3:4 4:3 5:1	swap the second and third figures	1:0 2:4 3:2 4:3 5:1	remove the second figure	1:0 2:2 3:3 4:1	swap the second and third figures	1:0 2:3 3:2 4:1	remove the third figure	1:0 2:3 3:1	add back the figure removed in step 2, and place in the third space	1:0 2:3 3:4 4:1
+train-440	1:2 2:1 3:3 4:0 5:4	delete the rightmost figure	1:2 2:1 3:3 4:0	undo step 1	1:2 2:1 3:3 4:0 5:4	delete the 1st figure	1:1 2:3 3:0 4:4	swap the 1st and 3rd figure	1:0 2:3 3:1 4:4	undo step 4	1:1 2:3 3:0 4:4
