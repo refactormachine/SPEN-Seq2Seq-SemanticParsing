@@ -2,7 +2,7 @@
 # Practical state-of-the-art text similarity with spaCy and Keras
 import numpy
 
-from keras.layers import InputSpec, Layer, Input, Dense, merge
+from keras.layers import InputSpec, Layer, Input, Dense, merge, Masking
 from keras.layers import Lambda, Activation, Dropout, Embedding, TimeDistributed
 from keras.layers import Bidirectional, GRU, LSTM
 from keras.layers.noise import GaussianNoise
@@ -112,9 +112,10 @@ class _StaticEmbedding(object):
 class _BiRNNEncoding(object):
     def __init__(self, max_length, nr_out,nr_in, dropout=0.0):
         self.model = Sequential()
+        self.model.add(Masking(mask_value=-9999., input_shape=(max_length, nr_in)))
         self.model.add(Bidirectional(LSTM(nr_out, return_sequences=True,
                                          dropout_W=dropout, dropout_U=dropout),
-                                         input_shape=(max_length, nr_in)))
+                                         ))
         self.model.add(TimeDistributed(Dense(nr_out, activation='relu', init='he_normal')))
         self.model.add(TimeDistributed(Dropout(0.2)))
 
