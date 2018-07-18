@@ -264,10 +264,11 @@ class Decoder(object):
     def train_decomposable_batches_one_hot(self, beams, examples):
         self._train_step_count += 1
 
-        if self._train_step_count < 80:
+        if self._train_step_count < 10:
             return
 
         for example, beam in zip(examples, beams):
+            beam_batch_correct = [[], []]
             beam_batch = [[], []]
             if len(beam._paths) == 0:
                 continue
@@ -287,6 +288,7 @@ class Decoder(object):
 
             one_hot_vec_dim = len(self.predicate_dictionary)
 
+            indexes = []
             for idx, path in enumerate(beam._paths):
                 check_denote = int(check_denotation(example.answer, path.finalized_denotation))
                 y_hat[idx, check_denote] = 1
@@ -299,20 +301,38 @@ class Decoder(object):
 
                 beam_batch[0].append(utter_embds_np)
                 beam_batch[1].append(decisions_one_hot)
+                if check_denote:
+                    beam_batch_correct[0].append(utter_embds_np)
+                    beam_batch_correct[1].append(decisions_one_hot)
+                    indexes.append(idx)
+
+            # at least one correct path
+            if not beam_batch_correct[0]:
+                continue
+
+            y_hat_new = np.zeros((len(indexes), 2), dtype='int32')
+
+            for i in range(len(indexes)):
+                y_hat_new[i, 1] = 1
+
+            beam_batch_correct[0] = np.array(beam_batch_correct[0])
+            beam_batch_correct[1] = np.array(beam_batch_correct[1])
             beam_batch[0] = np.array(beam_batch[0])
             beam_batch[1] = np.array(beam_batch[1])
-            output = self._decomposable.train_on_batch(beam_batch, y_hat, class_weight=self._class_weight)
+            loss = self._decomposable.train_on_batch(beam_batch, y_hat, class_weight=self._class_weight)
 
-            if self._train_step_count % 100 == 0:
-                print >> sys.stderr, '\rprediction: \r{}\routput: {} \033[F'.format(
-                    self._decomposable.predict(beam_batch, batch_size=len(beam_batch[0]), verbose=0),
-                    output
-                )
+            if self._train_step_count % 50 == 0:
+                predictions = self._decomposable.predict(beam_batch, batch_size=len(beam_batch[0]),
+                                                         verbose=0)
+                for curr_predict, curr_y_hat in zip(predictions, y_hat):
+                    print 'Predicted: {} Golden: {} Prediction: {}'.format(
+                        curr_predict[0] < curr_predict[1], curr_y_hat[1] == 1, curr_predict)
+                print 'loss: {}'.format(loss)
 
     def train_decomposable_batches_on_stack(self, beams, examples):
         self._train_step_count += 1
 
-        if self._train_step_count < 80:
+        if self._train_step_count < 10:
             return
 
         for example, beam in zip(examples, beams):
@@ -360,10 +380,13 @@ class Decoder(object):
             beam_batch[0] = np.array(beam_batch[0])
             beam_batch[1] = np.array(beam_batch[1])
 
-            output = self._decomposable.train_on_batch(beam_batch, y_hat, class_weight=self._class_weight)
+            loss = self._decomposable.train_on_batch(beam_batch, y_hat, class_weight=self._class_weight)
 
             if self._train_step_count % 10 == 0:
-                print >> sys.stderr, '\rprediction: \r{}\routput: {} \033[F'.format(
-                    self._decomposable.predict(beam_batch, batch_size=len(beam_batch[0]), verbose=0),
-                    output
-                )
+                predictions = self._decomposable.predict(beam_batch, batch_size=len(beam_batch[0]),
+                                                         verbose=0)
+                for curr_predict, curr_y_hat in zip(predictions, y_hat):
+                    print 'Predicted: {} Golden: {} Prediction: {}'.format(
+                        curr_predict[0] < curr_predict[1], curr_y_hat[1] == 1, curr_predict)
+                print 'loss: {}'.format(loss)
+
