@@ -63,6 +63,9 @@ class RLongExampleFactory(ExampleFactory):
                         # Maximum number of steps
                         num_steps = len(line) / 2 - 1
                     start_idx = 1
+                    if line[start_idx+2*num_steps] == '?':
+                        continue
+
                     while start_idx + 2 * num_steps < len(line):
                         utterances = [utterance.split() for utterance in
                                 line[start_idx+1:start_idx+2*num_steps:2]]

@@ -75,9 +75,9 @@ decoder {
 
 dataset {
     domain = rlong
-    train_num_steps = [-1]
-    valid_num_steps = [1,2,3,4,5]
-    final_num_steps = [1,2,3,4,5]
+    train_num_steps = [1]
+    valid_num_steps = [1]
+    final_num_steps = [1]
     train_slice_steps_from_middle = False
     valid_slice_steps_from_middle = False
     final_slice_steps_from_middle = False

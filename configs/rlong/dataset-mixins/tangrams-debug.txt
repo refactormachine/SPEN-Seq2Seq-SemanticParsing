@@ -3,7 +3,7 @@
 parse_model {
     utterance_embedder {
         utterance_length = 15
-        utterance_num = 5
+        utterance_num = 1
     }
 }
 
