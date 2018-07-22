@@ -14,6 +14,7 @@ pyhocon==0.3.29
 pytest==2.9.2
 python_levenshtein==0.12.0
 scipy==0.18.1
+headers_workaround==0.18
 spacy==0.99
 sqlalchemy==1.1.0b3
 tensorflow==0.12.0
