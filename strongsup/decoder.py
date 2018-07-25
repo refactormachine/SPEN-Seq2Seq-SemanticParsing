@@ -1,13 +1,13 @@
 from collections import namedtuple
 
-import tensorflow as tf
 import numpy as np
+import tensorflow as tf
+from gtd.utils import flatten
 
-from gtd.utils import flatten, as_batches
 from strongsup.case_weighter import get_case_weighter
 from strongsup.tests.keras_decomposable_attention import build_model
-from strongsup.value_function import get_value_function, ValueFunctionExample
 from strongsup.value import check_denotation
+from strongsup.value_function import get_value_function, ValueFunctionExample
 
 
 class NormalizationOptions(object):
@@ -30,7 +30,7 @@ class Decoder(object):
     """
 
     def __init__(self, parse_model, config, domain, glove_embeddings, predicates,
-                 utter_len, max_stack_size, predicate_embedder_type='stack'):
+                 utter_len, max_stack_size, predicate_embedder_type='stack_embedder'):
         """Create a new decoder.
 
         Args:
@@ -267,7 +267,7 @@ class Decoder(object):
         :param path_cases: path._cases from the beam path
         :return:
         """
-        if self._predicate_embedder_type == 'stack':
+        if self._predicate_embedder_type == 'stack_embedder':
             # define variables to fetch
             fetch = {
                 'stack_embedder': self.parse_model._parse_model._stack_embedder.embeds
@@ -295,23 +295,30 @@ class Decoder(object):
 
     def train_decomposable_batches(self, beams, examples):
         self._train_step_count += 1
+        num_of_steps_between_prints = 10
 
-        if self._train_step_count < 40:
+        if self._train_step_count < 0:
             return
-
-        beam_batch = [[], []]
-        y_hat_batch = []
 
         for example, beam in zip(examples, beams):
             if len(beam._paths) == 0:
                 continue
 
+            beam_batch_correct = [[], []]
+            beam_batch = [[], []]
+            y_hat_batch = []
+            indexes = []
             utter_embds = []
-
+            sentence_for_print = ''
             for utter in beam._paths[0].context.utterances:
                 for token in utter._tokens:
                     utter_embds += [self._glove_embeddings[token]]
+                    sentence_for_print += token + ' '
+
             utter_embds = np.array(utter_embds)
+            world_state = ''
+            for currObject in example.context.world.initial_state.all_objects:
+                world_state += ' ' + str(currObject.position) + ':' + currObject.shape
 
             utter_embds = np.concatenate((
                 utter_embds,
@@ -331,28 +338,69 @@ class Decoder(object):
                 beam_batch[0].append(utter_embds)
                 beam_batch[1].append(decisions_embedder)
 
-        if len(beam_batch[0]) > 0:
+                if check_denote:
+                    beam_batch_correct[0].append(utter_embds)
+                    beam_batch_correct[1].append(decisions_embedder)
+                    indexes.append(idx)
+
+            # at least one correct path
+            if not beam_batch_correct[0]:
+                continue
+
+            y_hat_new = np.zeros((len(indexes), 2), dtype='int32')
+
+            for i in range(len(indexes)):
+                y_hat_new[i, 1] = 1
+
+            beam_batch_correct[0] = np.array(beam_batch_correct[0])
+            beam_batch_correct[1] = np.array(beam_batch_correct[1])
+
             beam_batch[0] = np.array(beam_batch[0])
             beam_batch[1] = np.array(beam_batch[1])
             y_hat_batch = np.array(y_hat_batch)
+            loss = self._decomposable.train_on_batch(beam_batch, y_hat_batch, class_weight=self._class_weight)
 
-            randomize = np.arange(len(beam_batch[0]))
-            np.random.shuffle(randomize)
-            beam_batch[0] = beam_batch[0][randomize]
-            beam_batch[1] = beam_batch[1][randomize]
-            y_hat_batch = y_hat_batch[randomize]
+            if self._train_step_count % num_of_steps_between_prints == 0:
+                predictions = self._decomposable.predict(beam_batch, batch_size=len(beam_batch[0]),
+                                                         verbose=0)
+                print 'utter: ' + sentence_for_print
+                print 'world state:' + world_state
+                for idx, (curr_predict, curr_y_hat) in enumerate(zip(predictions, y_hat_batch)):
+                    full_decision_for_print = ''
+                    for decision in beam._paths[idx].decisions:
+                        full_decision_for_print += ' ' + decision._name
+                    print 'decision:' + full_decision_for_print
+                    print 'Predicted: {} Golden: {} Prediction: {}'.format(
+                        curr_predict[0] < curr_predict[1], curr_y_hat[1] == 1, curr_predict)
+                    print ''
+                print 'loss: {}'.format(loss)
 
-            for itr in range(0,len(beam_batch[0]),10):
-                inputs = [np.array([beam_batch[0][itr * 10 + idx] for idx in range(min(10, len(beam_batch[0]) - itr))]),
-                          np.array([beam_batch[1][itr * 10 + idx] for idx in range(min(10, len(beam_batch[0]) - itr))])]
-                print self._decomposable.train_on_batch(inputs,
-                                                         np.array([y_hat_batch[itr * 10 + idx] for idx
-                                                                   in range(min(10, len(beam_batch[0]) - itr))])
-                                                        , class_weight=self._class_weight)
-
-            if self._train_step_count % 1 == 0:
-                for itr in range(len(beam_batch[0])):
-                    inputs = [np.array([beam_batch[0][itr]]),
-                                                      np.array([beam_batch[1][itr]])]
-                    print self._decomposable.predict_on_batch(inputs)
+            # randomize = np.arange(len(beam_batch[0]))
+            # np.random.shuffle(randomize)
+            # beam_batch[0] = [beam_batch[0][i] for i in randomize]
+            # beam_batch[1] = [beam_batch[1][i] for i in randomize]
+            # y_hat_batch = [y_hat_batch[i] for i in randomize]
+            #
+            # for itr in range(0, len(beam_batch[0]), 10):
+            #     inputs = [np.array([beam_batch[0][itr * 10 + idx] for idx in range(min(10, len(beam_batch[0]) - itr))]),
+            #               np.array([beam_batch[1][itr * 10 + idx] for idx in range(min(10, len(beam_batch[0]) - itr))])]
+            #     loss = self._decomposable.train_on_batch(inputs,
+            #                                              np.array([y_hat_batch[itr * 10 + idx] for idx
+            #                                                        in range(min(10, len(beam_batch[0]) - itr))]),
+            #                                              class_weight=self._class_weight)
+            #
+            # if self._train_step_count % num_of_steps_between_prints == 0:
+            #     beam_batch[0] = np.array(beam_batch[0])
+            #     beam_batch[1] = np.array(beam_batch[1])
+            #     predictions = self._decomposable.predict(beam_batch, batch_size=len(beam_batch[0]),
+            #                                              verbose=0)
+            #     for idx, (curr_predict, curr_y_hat) in enumerate(zip(predictions, y_hat)):
+            #         full_decision_for_print = ''
+            #         for decision in beam._paths[idx].decisions:
+            #             full_decision_for_print += ' ' + decision._name
+            #         print 'desicion:' + full_decision_for_print
+            #         print 'Predicted: {} Golden: {} Prediction: {}'.format(
+            #             curr_predict[0] < curr_predict[1], curr_y_hat[1] == 1, curr_predict)
+            #         print ''
+            #     print 'loss: {}'.format(loss)
 
