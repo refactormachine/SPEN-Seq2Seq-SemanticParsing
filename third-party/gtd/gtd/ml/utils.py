@@ -427,7 +427,7 @@ def expand_dims_for_broadcast(low_tensor, high_tensor):
 
     with tf.control_dependencies([assert_op]):
         pad_shape = tf.tile([1], [target_rank - orig_rank])
-        new_shape = tf.concat([orig_shape, pad_shape], 0)
+        new_shape = tf.concat(0, [orig_shape, pad_shape])
         result = tf.reshape(low_tensor, new_shape)
 
     # add static shape information

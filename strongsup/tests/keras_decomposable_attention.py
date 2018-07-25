@@ -12,13 +12,15 @@ from keras.models import Sequential, Model, model_from_json
 from keras.regularizers import l2
 from keras.optimizers import Adam
 from keras.layers.normalization import BatchNormalization
+from keras.layers.pooling import GlobalAveragePooling1D, GlobalMaxPooling1D
+from keras.layers import Merge
 
 
 def build_model(shape_utt, shape_path, settings):
     """Compile the model."""
     max_length_utt, nr_hidden_utt, nr_class_utt = shape_utt
     max_length_path, nr_hidden_path, nr_class_path = shape_path
-    nr_hidden_output = min(nr_hidden_utt,nr_hidden_path)
+    nr_hidden_output = max(nr_hidden_utt,nr_hidden_path) * 2
     
     # Declare inputs.
     utterance_inp = Input(shape=(max_length_utt,nr_hidden_utt,), dtype='float32', name='words1')
@@ -114,7 +116,7 @@ class _BiRNNEncoding(object):
         self.model.add(Bidirectional(LSTM(nr_out, return_sequences=True,
                                           dropout_W=dropout, dropout_U=dropout),
                                      input_shape=(max_length, nr_in)))
-        self.model.add(TimeDistributed(Dense(nr_out, activation='relu', init='he_normal', name = 'birnndense')))
+        self.model.add(TimeDistributed(Dense(nr_out, activation='relu', init='he_normal')))
         self.model.add(TimeDistributed(Dropout(0.2)))
 
     def __call__(self, sentence):
@@ -206,16 +208,61 @@ class _Comparison(object):
         else:
             result = self.model_path(merge([sent, align], mode='concat')) # Shape: (i, n)
 
-        # avged = GlobalAveragePooling1D()(result, mask=max_len)
-        # maxed = GlobalMaxPooling1D()(result, mask=max_len)
-        summed = _GlobalSumPooling1D()(result, mask=max_len)
-        # merged = merge([avged, maxed])
-        result = BatchNormalization()(summed)
+        avged = GlobalAveragePooling1D()(result, mask=max_len)
+        maxed = GlobalMaxPooling1D()(result, mask=max_len)
+        merged = merge([avged, maxed])
+        result = BatchNormalization()(merged)
         return result
 
 
-# class GlobalAveragey
-#  input_shape[0], input_shape[2]
+class GlobalAveragePooling1DMasked(Layer):
+    def __init__(self, **kwargs):
+        self.supports_masking = True
+        super(GlobalAveragePooling1DMasked, self).__init__(**kwargs)
+
+    def compute_mask(self, input, input_mask=None):
+        # do not pass the mask to the next layers
+        return None
+
+    def call(self, x, mask=None):
+        if mask is not None:
+            # mask (batch, time)
+            mask = K.cast(mask, K.floatx())
+            # mask (batch, x_dim, time)
+            mask = K.repeat(mask, x.get_shape()[-1])
+            # mask (batch, time, x_dim)
+            mask = K.tf.transpose(mask, [0,2,1])
+            # x = x * mask
+        return K.sum(x, axis=1)
+
+    def compute_output_shape(self, input_shape):
+        # remove temporal dimension
+        return input_shape[0], input_shape[2]
+
+
+class GlobalMaxPooling1DMasked(Layer):
+    def __init__(self, **kwargs):
+        self.supports_masking = True
+        super(GlobalMaxPooling1DMasked, self).__init__(**kwargs)
+
+    def compute_mask(self, input, input_mask=None):
+        # do not pass the mask to the next layers
+        return None
+
+    def call(self, x, mask=None):
+        if mask is not None:
+            # mask (batch, time)
+            mask = K.cast(mask, K.floatx())
+            # mask (batch, x_dim, time)
+            mask = K.repeat(mask, x.get_shape()[-1])
+            # mask (batch, time, x_dim)
+            mask = K.tf.transpose(mask, [0, 2, 1])
+            x = x * mask
+        return K.max(x, axis=1)
+
+    def compute_output_shape(self, input_shape):
+        # remove temporal dimension
+        return input_shape[0], input_shape[2]
 
 
 # class GlobalAveragePooling1DMasked(GlobalAveragePooling1D):
@@ -241,7 +288,7 @@ class _Entailment(object):
         self.model = Sequential()
         self.model.add(Dropout(dropout, input_shape=(nr_hidden*2,)))
         self.model.add(Dense(nr_hidden, name='entail1',
-            init='he_normal', W_regularizer=l2(L2), input_shape=(nr_hidden*2,)))
+            init='he_normal', W_regularizer=l2(L2)))
         self.model.add(Activation('relu'))
         self.model.add(Dropout(dropout))
         self.model.add(Dense(nr_hidden, name='entail2',
@@ -263,7 +310,6 @@ class _GlobalSumPooling1D(Layer):
         2D tensor with shape: `(samples, features)`.
     '''
     def __init__(self, **kwargs):
-        self.supports_masking = True
         super(_GlobalSumPooling1D, self).__init__(**kwargs)
         self.input_spec = [InputSpec(ndim=3)]
 
@@ -272,14 +318,7 @@ class _GlobalSumPooling1D(Layer):
 
     def call(self, x, mask=None):
         if mask is not None:
-            # mask (batch, time)
-            mask = K.cast(mask, K.floatx())
-            # mask (batch, x_dim, time)
-            mask = K.repeat(mask, x.get_shape()[-1])
-            # mask (batch, time, x_dim)
-            mask = K.tf.transpose(mask, [0, 2, 1])
-            x = x * mask
-            return K.sum(x * K.clip(K.tf.to_float(mask), 0, 1), axis=1)
+            return K.sum(x * K.clip(mask, 0, 1), axis=1)
         else:
             return K.sum(x, axis=1)
 
