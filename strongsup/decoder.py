@@ -30,7 +30,7 @@ class Decoder(object):
     """
 
     def __init__(self, parse_model, config, domain, glove_embeddings, predicates,
-                 utter_len, max_stack_size, predicate_embedder_type='stack_embedder'):
+                 utter_len, max_stack_size, predicate_embedder_type='one_hot'):
         """Create a new decoder.
 
         Args:

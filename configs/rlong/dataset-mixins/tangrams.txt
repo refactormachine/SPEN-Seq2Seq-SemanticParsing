@@ -5,6 +5,9 @@ parse_model {
         utterance_length = 15
         utterance_num = 1
     }
+    decisions_embedder {
+        decisions_length = 8
+    }
 }
 
 dataset {

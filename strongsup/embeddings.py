@@ -31,14 +31,6 @@ class StaticPredicateEmbeddings(SimpleEmbeddings):
         super(StaticPredicateEmbeddings, self).__init__(array, vocab)
 
 
-class TypeEmbeddings(SimpleEmbeddings):
-    """All type embeddings are initialized with zero vectors."""
-    def __init__(self, embed_dim, all_types):
-        vocab = SimpleVocab(all_types)
-        array = emulate_distribution((len(vocab), embed_dim), GloveEmbeddings(5000).array, seed=1)
-        super(TypeEmbeddings, self).__init__(array, vocab)
-
-
 class RLongPrimitiveEmbeddings(SimpleEmbeddings):
     def __init__(self, embed_dim):
         OBJECT = 'object'
@@ -95,6 +87,14 @@ class UtteranceVocab(SimpleVocab):
             return sup.word2index(self.UNK)
 
 
+class TypeEmbeddings(SimpleEmbeddings):
+    """All type embeddings are initialized with zero vectors."""
+    def __init__(self, embed_dim, all_types):
+        vocab = SimpleVocab(all_types)
+        array = emulate_distribution((len(vocab), embed_dim), GloveEmbeddings(5000).array, seed=1)
+        super(TypeEmbeddings, self).__init__(array, vocab)
+
+
 class GloveEmbeddings(SimpleEmbeddings):
     def __init__(self, vocab_size=400000):
         """Load GloveEmbeddings.
@@ -136,6 +136,38 @@ class GloveEmbeddings(SimpleEmbeddings):
         assert embed_matrix.shape[1] == 100
 
         super(GloveEmbeddings, self).__init__(embed_matrix, vocab)
+
+
+class DecisionsOneHotEmbeddings(SimpleEmbeddings):
+    def __init__(self, predicates):
+        vocab = SimpleVocab(predicates)
+        self._predicate2index = self._build_predicate_dictionary(predicates)
+        array = None  # todo: array of one-hot vectors
+        array = emulate_distribution((len(vocab), len(vocab)), array, seed=3)
+
+        # predicates = self._domain.fixed_predicates
+        super(DecisionsOneHotEmbeddings, self).__init__(array, vocab)
+
+    @staticmethod
+    def _build_predicate_dictionary(predicates):
+        predicate_dict = {}
+        for i, predicate in enumerate(predicates):
+            predicate_dict[predicate.name] = i
+        return predicate_dict
+
+    def decisions_to_one_hot(self, decisions):
+        pred_dict = self.predicate_dictionary
+        one_hot_decisions = np.empty(shape=(len(decisions), len(pred_dict)))
+
+        for i, decision in enumerate(decisions):
+            one_hot_decision = np.zeros(shape=len(pred_dict))
+            one_hot_decision[pred_dict[decision.name]] = 1
+            one_hot_decisions[i] = one_hot_decision
+        return np.array(one_hot_decisions)
+
+    @property
+    def predicate_dictionary(self):
+        return self._predicate2index
 
 
 ContextualPredicate = namedtuple('ContextualPredicate', ['predicate', 'utterance'])

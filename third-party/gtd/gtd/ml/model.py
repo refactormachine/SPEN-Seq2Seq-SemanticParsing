@@ -224,6 +224,20 @@ class Attention(Model):
         self._projection_layer.set_weights([W, b])
 
 
+class BidiAttention(Model):
+    """Implements bidirectional attention.
+
+    Given some memory, a memory mask and a query, outputs the weighted memory cells.
+    """
+
+    def __init__(self, query1, query2, project_query=False):
+        self._attention_mat = tf.batch_matmul(query1, query2)
+
+    @property
+    def attention_matrix(self):
+        return self._attention_mat
+
+
 class Scorer(Model):
     __metaclass__ = ABCMeta
 
@@ -243,6 +257,54 @@ class CandidateScorer(Feedable, Scorer):
             project_query (bool): whether to project the query tensor to match the dimension of the cand_embeds
         """
         with tf.name_scope("CandidateScorer"):
+            cand_batch = FeedSequenceBatch()
+            embedded_cand_batch = embed(cand_batch, cand_embeds)  # (batch_size, num_candidates, cand_dim)
+            attention = Attention(embedded_cand_batch, query, project_query=project_query)
+
+        self._attention = attention
+        self._cand_batch = cand_batch
+        self._scores = SequenceBatch(attention.logits, cand_batch.mask)
+        self._probs = SequenceBatch(attention.probs, cand_batch.mask)
+
+    @property
+    def probs(self):
+        return self._probs
+
+    @property
+    def scores(self):
+        return self._scores
+
+    @property
+    def projection_weights(self):
+        return self._attention.projection_weights
+
+    @projection_weights.setter
+    def projection_weights(self, value):
+        self._attention.projection_weights = value
+
+    def inputs_to_feed_dict(self, candidates, cand_vocab):
+        """Feed inputs.
+
+        Args:
+            candidates (list[list[unicode]]): a batch of sequences, where each sequence is a unique set of candidates.
+            cand_vocab (Vocab): a map from a candidate string to an int
+
+        Returns:
+            feed_dict
+        """
+        return self._cand_batch.inputs_to_feed_dict(candidates, cand_vocab)
+
+
+class CandidateBidiScorer(Feedable, Scorer):
+    def __init__(self, query1, query2, project_query=False):
+        """Create a CandidateScorer.
+
+        Args:
+            query1 (Tensor): of shape (batch_size, query_dim)
+            query2 (Tensor): of shape (cand_vocab_size, cand_dim)
+            project_query (bool): whether to project the query tensor to match the dimension of the cand_embeds
+        """
+        with tf.name_scope("CandidateBidiScorer"):
             cand_batch = FeedSequenceBatch()
             embedded_cand_batch = embed(cand_batch, cand_embeds)  # (batch_size, num_candidates, cand_dim)
             attention = Attention(embedded_cand_batch, query, project_query=project_query)

@@ -4,7 +4,7 @@ from abc import abstractproperty, ABCMeta
 
 import numpy as np
 import tensorflow as tf
-from keras.layers import Dense
+from keras.layers import Dense, K
 from numpy.testing import assert_array_almost_equal
 
 from gtd.chrono import verboserate
@@ -285,6 +285,50 @@ class UtteranceEmbedder(Embedder):
         return self._gathered_embeds
 
 
+class DecisionsEmbedder(Embedder):
+    def __init__(self, decisions_embedder, lstm_dim, decisions_length):
+        with tf.name_scope('DecisionsEmbedder'):
+            self._word_vocab = decisions_embedder.vocab
+
+            # A simpler embedder which is order-blind
+            # self._seq_embedder = MeanSequenceEmbedder(word_embedder.embeds, seq_length=utterance_length)
+            # self._seq_embedder.hidden_states = self._seq_embedder._embedded_sequence_batch
+
+            self._seq_embedder = BidiLSTMSequenceEmbedder(decisions_embedder.embeds, seq_length=decisions_length, hidden_size=lstm_dim)
+
+            self._gather_indices = tf.placeholder(tf.int32, shape=[None], name='gather_indices')
+            self._gathered_embeds = tf.gather(self._seq_embedder.embeds, self._gather_indices)
+
+            hidden_states = self._seq_embedder.hidden_states
+            self._hidden_states_by_decisions = hidden_states
+            self._gathered_hidden_states = SequenceBatch(tf.gather(hidden_states.values, self._gather_indices),
+                                                         tf.gather(hidden_states.mask, self._gather_indices))
+
+    @property
+    def hidden_states(self):
+        """A SequenceBatch."""
+        return self._gathered_hidden_states
+
+    @property
+    def hidden_states_by_decisions(self):
+        return self._hidden_states_by_decisions
+
+    def inputs_to_feed_dict(self, cases, decisions_vocab):
+        # Optimization: Multiple cases have the same context (same decisions)
+        gather_indices = []
+        for case in cases:  # todo: use one-hot vector for decisions (the one we already have)
+            gather_indices.append(decisions_vocab.word2index(case.current_utterance))
+
+        feed = self._seq_embedder.inputs_to_feed_dict(decisions_vocab.tokens, self._word_vocab)
+        feed[self._gather_indices] = gather_indices
+        return feed
+
+    @property
+    def embeds(self):
+        # return self._seq_embedder.embeds
+        return self._gathered_embeds
+
+
 class HistoryEmbedder(Embedder):
     def __init__(self, pred_embedder, history_length):
         pred_embeds = pred_embedder.embeds
@@ -357,6 +401,18 @@ class HistoryEmbedder(Embedder):
 
 class SimplePredicateScorer(CandidateScorer):
     def __init__(self, query, predicate_embedder):
+        """Given a query vector, compute logit scores for each predicate choice.
+
+        Args:
+            query (Tensor): the query tensor, of shape (batch_size, ?)
+            predicate_embedder (CombinedPredicateEmbedder)
+        """
+        pred_embeds = predicate_embedder.embeds
+        super(SimplePredicateScorer, self).__init__(query, pred_embeds, project_query=True)
+
+
+class DecomposableAttentionScorer(CandidateScorer):
+    def __init__(self, query1, predicate_embedder):
         """Given a query vector, compute logit scores for each predicate choice.
 
         Args:
@@ -639,6 +695,234 @@ class ParseModel(Feedable):
         feed.update(feed_dict(self._history_embedder)(cases, vocabs, ignore_previous_utterances))
         feed.update(feed_dict(self._stack_embedder)(cases))
         feed.update(feed_dict(self._utterance_embedder)(cases, vocabs.utterances))
+        feed.update(feed_dict(self._scorer)(cases, vocabs))
+
+        if caching:
+            self._cache_calls += 1
+            # every once in a while, check that the cache values are not stale
+            if self._cache_calls % self._test_cache_every_k == 0:
+                fresh_feed = self.inputs_to_feed_dict(cases, caching=False)
+                for key in fresh_feed:
+                    try:
+                        assert_array_almost_equal(
+                            fresh_feed[key], feed[key], decimal=3)
+                    except Exception as e:
+                        print 'WTF', key
+                        print cases
+                        print fresh_feed[key]
+                        print feed[key]
+                        raise e
+                        # assert_array_collections_equal(fresh_feed, feed, decimal=4)
+
+        return feed
+
+    def score(self, cases, ignore_previous_utterances, caching):
+        """Populate the choice_logits property for every ParseCase in the batch.
+
+        Args:
+            cases (list[ParseCase])
+            ignore_previous_utterances (bool): if True, pretend like the previous utterances were not uttered
+            caching (bool)
+        """
+        if len(cases) == 0:
+            return
+
+        # define variables to fetch
+        fetch = {
+            'logits': self._logits,
+            'log_probs': self._log_probs,
+        }
+        if self._stack_embedder:
+            fetch['stack_hash'] = self._stack_embedder.embeds_hash
+        if self._history_embedder:
+            fetch['history_hash'] = self._history_embedder.embeds_hash
+
+        # fetch variables
+        fetched = self.compute(fetch, cases, ignore_previous_utterances, caching)
+
+        # unpack fetched values
+        logits, log_probs = fetched['logits'], fetched['log_probs']  # numpy arrays with shape (batch_size, max_choices)
+        stack_hash = fetched['stack_hash'] if self._stack_embedder else [None] * len(cases)
+        history_hash = fetched['history_hash'] if self._history_embedder else [None] * len(cases)
+
+        num_nans = lambda arr: np.sum(np.logical_not(np.isfinite(arr)))
+
+        # cut to actual number of choices
+        for i, case in enumerate(cases):
+            case.choice_logits = logits[i, :len(case.choices)]
+            case.choice_log_probs = log_probs[i, :len(case.choices)]
+            case.pretty_embed = PrettyCaseEmbedding(history_hash[i], stack_hash[i])
+
+            logit_nans = num_nans(case.choice_logits)
+            log_prob_nans = num_nans(case.choice_log_probs)
+
+            # Tracking NaN
+            if logit_nans > 0:
+                logging.error("logit NaNs: %d/%d", logit_nans, case.choice_logits.size)
+            if log_prob_nans > 0:
+                logging.error("log_prob NaNs: %d/%d", log_prob_nans, case.choice_log_probs.size)
+
+    def score_paths(self, paths, ignore_previous_utterances, caching):
+        cases_to_be_scored = []
+        used_case_ids = set()
+        for path in paths:
+            for case in path:
+                if id(case) not in used_case_ids:
+                    cases_to_be_scored.append(case)
+                    used_case_ids.add(id(case))
+        self.score(cases_to_be_scored, ignore_previous_utterances, caching)
+
+    def score_breakdown(self, cases, ignore_previous_utterances, caching):
+        """Return the logits for all (parse case, choice, scorer) tuples.
+
+        Args:
+            cases (list[ParseCase])
+            ignore_previous_utterances (bool): if True, pretend like the previous utterances were not uttered
+            caching (bool)
+        Returns:
+            attention_on_utterance:
+                np.array of shape (len(cases), max len(utterance))
+                containing the attention score of each token.
+            sublogits:
+                np.array of shape (len(cases), max len(choices), number of scorers)
+                containing the logits of each scorer on each choice.
+                By default there are 3 scorers: basic, attention, and soft copy.
+        """
+        if len(cases) == 0:
+            return []
+        return self.compute([self._attention_on_utterance, self._sublogits], cases, ignore_previous_utterances, caching)
+
+
+class ParseModelDecomposable(Feedable):
+    """The NN responsible for reranking ParseCase choices.
+
+    Given a ParseCase, it will return a logit score for every option in ParseCase.options.
+    """
+
+    def __init__(self, desicions_embedder, utterance_embedder, scorer_factory, h_dims,
+                 domain, delexicalized):
+        """ParseModel.
+
+        Args:
+            utterance_embedder (UtteranceEmbedder)
+            scorer_factory (Callable[Tensor, PredicateScorer])
+            h_dims (list[int])
+            domain (str)
+            delexicalized (bool)
+        """
+        # ReLU feedforward network
+        with tf.name_scope('ParseModelDecomposable'):
+            state_embedders = [desicions_embedder, utterance_embedder]
+            state_embeds = []
+            for state_embedder in state_embedders:
+                if state_embedder:
+                    state_embeds.append(state_embedder.embeds)
+
+            self._input_layer_utterance = tf.concat(1, utterance_embedder)
+            # (batch_size, hist_dim + stack_dim + utterance_dim)
+            h = self._input_layer_utterance
+            for h_dim in h_dims:
+                h = Dense(h_dim, activation='relu')(h)  # (batch_size, h_dim)
+            query_utterance = h
+
+            self._input_layer_decisions = tf.concat(1, desicions_embedder)
+            # (batch_size, hist_dim + stack_dim + utterance_dim)
+            h = self._input_layer_decisions
+            for h_dim in h_dims:
+                h = Dense(h_dim, activation='relu')(h)  # (batch_size, h_dim)
+            query_decisions = h
+
+        attention_mat = self.attend(query_decisions, query_utterance)
+
+        utterance_alignment = tf.matmul(attention_mat, query_decisions)
+        decisions_alignment = tf.matmul(attention_mat, query_utterance)
+
+
+
+        self._domain = domain
+        self._utterance_embedder = utterance_embedder
+        self._desicions_embedder = desicions_embedder
+        self._scorer = scorer
+        self._logits = scorer.scores.values
+        self._attention_on_utterance = scorer.attention_on_utterance.logits
+        self._sublogits = scorer.subscores.values
+        self._log_probs = tf.nn.log_softmax(self._logits)
+        self._probs = scorer.probs.values
+
+        # track how many times we've called inputs_to_feed_dict with caching=True
+        self._cache_calls = 0
+        self._test_cache_every_k = 100
+
+    @staticmethod
+    def attend(query_decisions, query_utterance):
+        # att_ji = K.batch_dot(query_decisions, K.permute_dimensions(query_utterance, (0, 2, 1)))
+        # return K.permute_dimensions(att_ji, (0, 2, 1))
+        return tf.matmul(query_decisions, query_utterance)
+
+    @staticmethod
+    def align(att, mat, transpose=False):
+        if transpose:
+            att = K.permute_dimensions(att, (0, 2, 1))
+        # 3d softmax
+        e = K.exp(att - K.max(att, axis=-1, keepdims=True))
+        s = K.sum(e, axis=-1, keepdims=True)
+        sm_att = e / s
+        return K.batch_dot(sm_att, mat)
+
+    def compare(self):
+        pass
+
+    def aggregate(self):
+        pass
+
+    @property
+    def logits(self):
+        return self._logits
+
+    @property
+    def log_probs(self):
+        return self._log_probs
+
+    @property
+    def case_encodings(self):
+        return self._case_encodings
+
+    @property
+    def probs(self):
+        return self._probs
+
+    def _compute_vocabs(self, utterances):
+        """Compute Vocabs object.
+
+        Args:
+            utterances (frozenset[utterances])
+        """
+        return Vocabs(utterances, self._domain)
+
+    _compute_vocabs_cached = DictMemoized(_compute_vocabs)
+
+    def inputs_to_feed_dict(self, cases, ignore_previous_utterances, caching):
+        feed = {}
+
+        utterances = frozenset([case.current_utterance for case in cases])
+
+        if caching:
+            vocabs = self._compute_vocabs_cached(utterances)
+        else:
+            vocabs = self._compute_vocabs(utterances)
+
+        def feed_dict(model):
+            if model is None:
+                return lambda *args, **kwargs: {}  # nothing to be computed
+            if caching:
+                try:
+                    return model.inputs_to_feed_dict_cached
+                except AttributeError:
+                    pass  # no cached version available
+            return model.inputs_to_feed_dict
+
+        feed.update(feed_dict(self._utterance_embedder)(cases, vocabs.utterances))
+        feed.update(feed_dict(self._decisions_embedder)(cases, vocabs.utterances))
         feed.update(feed_dict(self._scorer)(cases, vocabs))
 
         if caching:

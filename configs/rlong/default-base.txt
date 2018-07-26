@@ -23,6 +23,10 @@ parse_model {
         lstm_dim = 64          # must be half of final h_dim
         # utterance_length = ???      <-- Need to be filled in by dataset mixin
     }
+    decisions_embedder {
+        lstm_dim = 14
+        # decisions_length = ???      <-- Need to be filled in by dataset mixin
+    }
     condition_on_history = True
     history_length = 4
     condition_on_stack = False

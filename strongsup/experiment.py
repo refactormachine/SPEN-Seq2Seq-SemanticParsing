@@ -14,8 +14,8 @@ from gtd.utils import cached_property, as_batches, random_seed, sample_if_large
 from strongsup.decoder import Decoder
 from strongsup.domain import get_domain
 from strongsup.embeddings import (
-        StaticPredicateEmbeddings, GloveEmbeddings, TypeEmbeddings,
-        RLongPrimitiveEmbeddings)
+    StaticPredicateEmbeddings, GloveEmbeddings, TypeEmbeddings,
+    RLongPrimitiveEmbeddings, DecisionsOneHotEmbeddings)
 from strongsup.evaluation import Evaluation, BernoulliSequenceStat
 from strongsup.example import Example, DelexicalizedContext
 from strongsup.parse_case import ParsePath
@@ -27,8 +27,8 @@ from strongsup.parse_model import (
     SimplePredicateScorer, AttentionPredicateScorer,
     SoftCopyPredicateScorer, PredicateScorer,
     CrossEntropyLossModel, LogitLossModel,
-    ParseModel, TrainParseModel,
-    ExecutionStackEmbedder, RLongObjectEmbedder)
+    ParseModel, ParseModelDecomposable, TrainParseModel,
+    ExecutionStackEmbedder, RLongObjectEmbedder, DecisionsEmbedder)
 from strongsup.utils import OptimizerOptions
 from strongsup.value_function import ValueFunctionExample
 from strongsup.visualizer import Visualizer
@@ -205,6 +205,136 @@ class Experiment(gtd.ml.experiment.TFExperiment):
             return scorer
 
         parse_model = ParseModel(pred_embedder, history_embedder, stack_embedder,
+                                 utterance_embedder, scorer_factory, config.h_dims,
+                                 self._domain, delexicalized)
+
+        if self.config.decoder.normalization == 'local':
+            loss_model_factory = CrossEntropyLossModel
+        else:
+            loss_model_factory = LogitLossModel
+        train_parse_model = TrainParseModel(parse_model, loss_model_factory,
+                                            self.config.learning_rate,
+                                            OptimizerOptions(self.config.optimizer),
+                                            self.config.get('train_batch_size'))
+
+        return train_parse_model
+
+    def _build_decomposable_train_parse_model(self):
+        """Construct the decomposable TrainParseModel.
+
+        If weights have been saved to disk, restore those weights.
+
+        Returns:
+            TrainParseModel
+        """
+        config = self.config.parse_model
+        delexicalized = self.config.delexicalized
+
+        # Glove embeddings have embed_dim 100
+        glove_embeddings = GloveEmbeddings(vocab_size=20000)
+        self._glove_embeddings = glove_embeddings
+        type_embeddings = TypeEmbeddings(embed_dim=50, all_types=self._domain.all_types)
+        decisions_embeddings = DecisionsOneHotEmbeddings(predicates=self._domain.fixed_predicates)
+
+        # set up word embeddings
+        word_embedder = TokenEmbedder(glove_embeddings, 'word_embeds', trainable=config.train_word_embeddings)
+        type_embedder = TokenEmbedder(type_embeddings, 'type_embeds')
+        decisions_embedder = TokenEmbedder(decisions_embeddings, 'decisions_embeds')
+
+        # build utterance embedder
+        utterance_embedder = UtteranceEmbedder(word_embedder, lstm_dim=config.utterance_embedder.lstm_dim,
+                                               utterance_length=config.utterance_embedder.utterance_length)
+        decisions_embedder = DecisionsEmbedder(decisions_embedder, lstm_dim=config.decisions_embedder.lstm_dim,
+                                               decisions_length=config.decisions_embedder.decisions_length)
+
+        # build predicate embedder
+
+        # dynamic
+        if delexicalized:
+            dyn_pred_embedder = DelexicalizedDynamicPredicateEmbedder(utterance_embedder.hidden_states_by_utterance,
+                                                                      type_embedder)
+        else:
+            dyn_pred_embedder = DynamicPredicateEmbedder(word_embedder, type_embedder)
+            if config.predicate_positions:
+                dyn_pred_embedder = PositionalPredicateEmbedder(dyn_pred_embedder)
+
+        # static
+        static_pred_embeddings = StaticPredicateEmbeddings(
+                dyn_pred_embedder.embed_dim,   # matching dim
+                self._domain.fixed_predicates)
+        static_pred_embedder = TokenEmbedder(static_pred_embeddings, 'static_pred_embeds')
+
+        # combined
+        pred_embedder = CombinedPredicateEmbedder(static_pred_embedder, dyn_pred_embedder)
+
+        # build history embedder
+        if config.condition_on_history:
+            history_embedder = HistoryEmbedder(pred_embedder, config.history_length)
+        else:
+            history_embedder = None
+
+        # build execution stack embedder
+        if config.condition_on_stack:
+            max_stack_size = self.config.decoder.prune.max_stack_size
+            max_list_size = config.stack_embedder.max_list_size
+            primitive_dim = config.stack_embedder.primitive_dim
+            object_dim = config.stack_embedder.object_dim
+
+            primitive_embeddings = RLongPrimitiveEmbeddings(primitive_dim)
+            stack_primitive_embedder = TokenEmbedder(primitive_embeddings, 'primitive_embeds', trainable=True)
+
+            # TODO(kelvin): pull this out as its own method
+            assert self.config.dataset.domain == 'rlong'
+            sub_domain = self.config.dataset.name
+            attrib_extractors = [lambda obj: obj.position]
+            if sub_domain == 'scene':
+                attrib_extractors.append(lambda obj: obj.shirt)
+                attrib_extractors.append(lambda obj: obj.hat)
+                pass
+            elif sub_domain == 'alchemy':
+                # skipping chemicals attribute for now, because it is actually a list
+                attrib_extractors.append(lambda obj: obj.color if obj.color is not None else 'color-na')
+                attrib_extractors.append(lambda obj: obj.amount)
+            elif sub_domain == 'tangrams':
+                attrib_extractors.append(lambda obj: obj.shape)
+            elif sub_domain == 'undograms':
+                attrib_extractors.append(lambda obj: obj.shape)
+            else:
+                raise ValueError('No stack embedder available for sub-domain: {}.'.format(sub_domain))
+
+            stack_object_embedder = RLongObjectEmbedder(attrib_extractors, stack_primitive_embedder,
+                                                        max_stack_size, max_list_size)
+
+            stack_embedder = ExecutionStackEmbedder(stack_primitive_embedder, stack_object_embedder,
+                                                    max_stack_size=max_stack_size,  max_list_size=max_list_size,
+                                                    project_object_embeds=True, abstract_objects=False)
+        else:
+            stack_embedder = None
+
+        def scorer_factory(query_tensor):
+            simple_scorer = SimplePredicateScorer(query_tensor, pred_embedder)
+            attention_scorer = AttentionPredicateScorer(query_tensor, pred_embedder, utterance_embedder)
+            soft_copy_scorer = SoftCopyPredicateScorer(attention_scorer.attention_on_utterance.logits,
+                                                       disable=not config.soft_copy
+                                                       )  # note that if config.soft_copy is None, then soft_copy is disabled
+            scorer = PredicateScorer(simple_scorer, attention_scorer, soft_copy_scorer)
+            return scorer
+
+        def scorer_factory_decomposable(query_utterance, query_decisions):
+            simple_scorer = SimplePredicateScorer(query_utterance, query_decisions,
+                                                  utterance_embedder, decisions_embedder)
+            attention_scorer = AttentionPredicateScorer(query_tensor, pred_embedder, utterance_embedder)
+            soft_copy_scorer = SoftCopyPredicateScorer(attention_scorer.attention_on_utterance.logits,
+                                                       disable=not config.soft_copy
+                                                       )  # note that if config.soft_copy is None, then soft_copy is disabled
+            scorer = PredicateScorer(simple_scorer, attention_scorer, soft_copy_scorer)
+            return scorer
+
+        parse_model = ParseModel(pred_embedder, history_embedder, stack_embedder,
+                                 utterance_embedder, scorer_factory_decomposable, config.h_dims,
+                                 self._domain, delexicalized)
+
+        parse_model_decomposable = ParseModelDecomposable(decisions_embedder,
                                  utterance_embedder, scorer_factory, config.h_dims,
                                  self._domain, delexicalized)
 
