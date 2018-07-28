@@ -20,7 +20,9 @@ def build_model(shape_utt, shape_path, settings):
     """Compile the model."""
     max_length_utt, nr_hidden_utt, nr_class_utt = shape_utt
     max_length_path, nr_hidden_path, nr_class_path = shape_path
-    nr_hidden_output = max(nr_hidden_utt,nr_hidden_path) * 2
+    nr_hidden_output = min(nr_hidden_utt, nr_hidden_path)
+
+    nr_hidden_output = 300
     
     # Declare inputs.
     utterance_inp = Input(shape=(max_length_utt,nr_hidden_utt,), dtype='float32', name='words1')

@@ -5,10 +5,13 @@ import numpy as np
 import os
 import cPickle as pickle
 import jsonpickle
+import tensorflow as tf
+from gtd.utils import flatten
 
 from gtd.utils import flatten, as_batches
 from strongsup.case_weighter import get_case_weighter
 from strongsup.tests.keras_decomposable_attention import build_model
+from strongsup.value import check_denotation
 from strongsup.value_function import get_value_function, ValueFunctionExample
 from strongsup.value import check_denotation
 
@@ -272,7 +275,7 @@ class Decoder(object):
         :param path_cases: path._cases from the beam path
         :return:
         """
-        if self._predicate_embedder_type == 'stack':
+        if self._predicate_embedder_type == 'stack_embedder':
             # define variables to fetch
             fetch = {
                 'stack_embedder': self.parse_model._parse_model._stack_embedder.embeds
