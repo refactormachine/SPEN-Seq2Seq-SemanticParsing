@@ -275,13 +275,21 @@ class Experiment(gtd.ml.experiment.TFExperiment):
                 step = decoder.step
 
                 self.report_cache_stats(step)
+                if(step > 50):
+                    decoder.pickle_all_examples()
+                    decoder.train_decomposable()
+
                 if (step + 1) % save_steps == 0:
                     self.saver.save(step)
                 if (step + 1) % eval_steps == 0:
                     self.evaluate(step)
+                    decoder.pickle_all_examples()
+                    decoder.train_decomposable()
                 if (step + 1) % big_eval_steps == 0:
                     self.big_evaluate(step)
                 if step >= self.config.max_iters:
+                    decoder.pickle_all_examples()
+                    decoder.train_decomposable()
                     self.evaluate(step)
                     self.saver.save(step)
                     return

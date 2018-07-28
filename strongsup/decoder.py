@@ -2,6 +2,9 @@ from collections import namedtuple
 
 import tensorflow as tf
 import numpy as np
+import os
+import cPickle as pickle
+import jsonpickle
 
 from gtd.utils import flatten, as_batches
 from strongsup.case_weighter import get_case_weighter
@@ -30,7 +33,7 @@ class Decoder(object):
     """
 
     def __init__(self, parse_model, config, domain, glove_embeddings, predicates,
-                 utter_len, max_stack_size, predicate_embedder_type='stack'):
+                 utter_len, max_stack_size, predicate_embedder_type='one_hot'):
         """Create a new decoder.
 
         Args:
@@ -60,6 +63,9 @@ class Decoder(object):
         self._predicate_embedder_type = predicate_embedder_type
         self.correct_predictions = 0
         self.all_predictions = 0
+        self._samples_beams_decomposable = [[], []]
+        self._y_hat_decomposable = []
+        self._cur_dir = os.getcwd()
 
         # Normalization and update policy
         self._normalization = config.normalization
@@ -228,8 +234,7 @@ class Decoder(object):
     def train_step(self, examples):
         # sample a beam of logical forms for each example
         beams = self.predictions(examples, train=True)
-
-        self.train_decomposable_batches(beams, examples)
+        self.add_decomposable_examples(beams, examples)
 
         all_cases = []  # a list of ParseCases to give to ParseModel
         all_case_weights = []  # the weights associated with the cases
@@ -293,14 +298,10 @@ class Decoder(object):
 
         return decisions_embedder
 
-    def train_decomposable_batches(self, beams, examples):
+    def add_decomposable_examples(self, beams, examples):
         self._train_step_count += 1
-
-        if self._train_step_count < 40:
+        if self._train_step_count < 20:
             return
-
-        beam_batch = [[], []]
-        y_hat_batch = []
 
         for example, beam in zip(examples, beams):
             if len(beam._paths) == 0:
@@ -322,37 +323,58 @@ class Decoder(object):
                 check_denote = int(check_denotation(example.answer, path.finalized_denotation))
                 y_hat = [0, 0]
                 y_hat[check_denote] = 1
-                y_hat_batch.append(y_hat)
+                self._y_hat_decomposable.append(y_hat)
                 self.correct_predictions += check_denote
                 self.all_predictions += 1
 
                 decisions_embedder = self.decisions_embedder(path.decisions, path._cases)
 
-                beam_batch[0].append(utter_embds)
-                beam_batch[1].append(decisions_embedder)
+                self._samples_beams_decomposable[0].append(utter_embds)
+                self._samples_beams_decomposable[1].append(decisions_embedder)
 
-        if len(beam_batch[0]) > 0:
-            beam_batch[0] = np.array(beam_batch[0])
-            beam_batch[1] = np.array(beam_batch[1])
-            y_hat_batch = np.array(y_hat_batch)
+    def pickle_all_examples(self):
+        with open(os.path.join(self._cur_dir, 'samples_beams.cpkl'), 'wb') as samples_file:
+            pickle.dump(self._samples_beams_decomposable, samples_file)
 
-            randomize = np.arange(len(beam_batch[0]))
-            np.random.shuffle(randomize)
-            beam_batch[0] = beam_batch[0][randomize]
-            beam_batch[1] = beam_batch[1][randomize]
-            y_hat_batch = y_hat_batch[randomize]
+        with open(os.path.join(self._cur_dir, 'y_hat.cpkl'), 'wb') as y_hat_file:
+            pickle.dump(self._y_hat_decomposable,y_hat_file)
 
-            for itr in range(0,len(beam_batch[0]),10):
-                inputs = [np.array([beam_batch[0][itr * 10 + idx] for idx in range(min(10, len(beam_batch[0]) - itr))]),
-                          np.array([beam_batch[1][itr * 10 + idx] for idx in range(min(10, len(beam_batch[0]) - itr))])]
-                print self._decomposable.train_on_batch(inputs,
-                                                         np.array([y_hat_batch[itr * 10 + idx] for idx
-                                                                   in range(min(10, len(beam_batch[0]) - itr))])
-                                                        , class_weight=self._class_weight)
 
-            if self._train_step_count % 1 == 0:
-                for itr in range(len(beam_batch[0])):
-                    inputs = [np.array([beam_batch[0][itr]]),
-                                                      np.array([beam_batch[1][itr]])]
-                    print self._decomposable.predict_on_batch(inputs)
+    def train_decomposable(self):
 
+        samples_file =  open(os.path.join(self._cur_dir, 'samples_beams.cpkl'), 'rb')
+        self._samples_beams_decomposable = pickle.load(samples_file)
+
+        y_hat_file =  open(os.path.join(self._cur_dir, 'y_hat.cpkl'), 'rb')
+        self._y_hat_decomposable = pickle.load(y_hat_file)
+
+        sanity_check_size1 = len(self._samples_beams_decomposable[0])
+        sanity_check_size2 = len(self._samples_beams_decomposable[1])
+        sanity_check_size3 = len(self._y_hat_decomposable)
+
+        self._samples_beams_decomposable[0] = np.array(self._samples_beams_decomposable[0])
+        self._samples_beams_decomposable[1] = np.array(self._samples_beams_decomposable[1])
+        y_hat_batch = np.array(self._y_hat_decomposable)
+
+        randomize = np.arange(len(self._samples_beams_decomposable[0]))
+        np.random.shuffle(randomize)
+        self._samples_beams_decomposable[0] = self._samples_beams_decomposable[0][randomize]
+        self._samples_beams_decomposable[1] = self._samples_beams_decomposable[1][randomize]
+        y_hat_batch = y_hat_batch[randomize]
+
+        for itr in range(0, len(self._samples_beams_decomposable[0]), 10):
+            inputs = [np.array([self._samples_beams_decomposable[0][itr * 10 + idx]
+                                for idx in range(min(10, len(self._samples_beams_decomposable[0]) - itr))]),
+                      np.array([self._samples_beams_decomposable[1][itr * 10 + idx]
+                                for idx in range(min(10, len(self._samples_beams_decomposable[0]) - itr))])]
+
+            print self._decomposable.train_on_batch(inputs,
+                                                    np.array([y_hat_batch[itr * 10 + idx] for idx
+                                                              in range(min(10, len(self._samples_beams_decomposable[0]) - itr))])
+                                                    , class_weight=self._class_weight)
+
+        if self._train_step_count % 1 == 0:
+            for itr in range(len(self._samples_beams_decomposable[0])):
+                inputs = [np.array([self._samples_beams_decomposable[0][itr]]),
+                          np.array([self._samples_beams_decomposable[1][itr]])]
+                print self._decomposable.predict_on_batch(inputs)
