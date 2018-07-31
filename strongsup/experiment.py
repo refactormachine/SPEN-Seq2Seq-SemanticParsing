@@ -227,7 +227,8 @@ class Experiment(gtd.ml.experiment.TFExperiment):
         return Decoder(train_parse_model, self.config.decoder, self._domain, self.glove_embeddings,
                        self._domain.fixed_predicates,
                        utterance_length * utterance_num,
-                       iterations_per_utterance * utterance_num
+                       iterations_per_utterance * utterance_num,
+                       self.tb_logger
                        )
 
     @cached_property

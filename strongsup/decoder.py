@@ -30,7 +30,7 @@ class Decoder(object):
     """
 
     def __init__(self, parse_model, config, domain, glove_embeddings, predicates,
-                 utter_len, max_stack_size, predicate_embedder_type='stack_embedder'):
+                 utter_len, max_stack_size, tb_logger, predicate_embedder_type='one_hot'):
         """Create a new decoder.
 
         Args:
@@ -55,6 +55,7 @@ class Decoder(object):
         self._path_checker = domain.path_checker
         self._utter_len = utter_len
         self._max_stack_size = max_stack_size
+        self._tb_logger = tb_logger
         self._train_step_count = 0
         self._class_weight = {0: 1., 1: 5.}
         self._predicate_embedder_type = predicate_embedder_type
@@ -300,13 +301,15 @@ class Decoder(object):
         if self._train_step_count < 0:
             return
 
+        beam_batch = [[], []]
+        y_hat_batch = []
+        decisions = []
+
         for example, beam in zip(examples, beams):
             if len(beam._paths) == 0:
                 continue
 
             beam_batch_correct = [[], []]
-            beam_batch = [[], []]
-            y_hat_batch = []
             indexes = []
             utter_embds = []
             sentence_for_print = ''
@@ -337,6 +340,11 @@ class Decoder(object):
 
                 beam_batch[0].append(utter_embds)
                 beam_batch[1].append(decisions_embedder)
+                full_decision_for_print = ''
+
+                for decision in path.decisions:
+                    full_decision_for_print += ' ' + decision._name
+                decisions.append(full_decision_for_print)
 
                 if check_denote:
                     beam_batch_correct[0].append(utter_embds)
@@ -352,55 +360,23 @@ class Decoder(object):
             for i in range(len(indexes)):
                 y_hat_new[i, 1] = 1
 
-            beam_batch_correct[0] = np.array(beam_batch_correct[0])
-            beam_batch_correct[1] = np.array(beam_batch_correct[1])
+        beam_batch_correct[0] = np.array(beam_batch_correct[0])
+        beam_batch_correct[1] = np.array(beam_batch_correct[1])
 
-            beam_batch[0] = np.array(beam_batch[0])
-            beam_batch[1] = np.array(beam_batch[1])
-            y_hat_batch = np.array(y_hat_batch)
-            loss = self._decomposable.train_on_batch(beam_batch, y_hat_batch, class_weight=self._class_weight)
+        beam_batch[0] = np.array(beam_batch[0])
+        beam_batch[1] = np.array(beam_batch[1])
+        y_hat_batch = np.array(y_hat_batch)
+        loss, accuracy = self._decomposable.train_on_batch(beam_batch, y_hat_batch, class_weight=self._class_weight)
 
-            if self._train_step_count % num_of_steps_between_prints == 0:
-                predictions = self._decomposable.predict(beam_batch, batch_size=len(beam_batch[0]),
-                                                         verbose=0)
-                print 'utter: ' + sentence_for_print
-                print 'world state:' + world_state
-                for idx, (curr_predict, curr_y_hat) in enumerate(zip(predictions, y_hat_batch)):
-                    full_decision_for_print = ''
-                    for decision in beam._paths[idx].decisions:
-                        full_decision_for_print += ' ' + decision._name
-                    print 'decision:' + full_decision_for_print
-                    print 'Predicted: {} Golden: {} Prediction: {}'.format(
-                        curr_predict[0] < curr_predict[1], curr_y_hat[1] == 1, curr_predict)
-                    print ''
-                print 'loss: {}'.format(loss)
+        if self._train_step_count % num_of_steps_between_prints == 0:
+            predictions = self._decomposable.predict(beam_batch, batch_size=len(beam_batch[0]),
+                                                     verbose=0)
+            print 'utter: ' + sentence_for_print
+            print 'world state:' + world_state
+            for idx, (curr_predict, curr_y_hat) in enumerate(zip(predictions, y_hat_batch)):
+                print 'decision:' + decisions[idx]
+                print 'Predicted: {} Golden: {} Prediction: {}\n'.format(
+                    curr_predict[0] < curr_predict[1], curr_y_hat[1] == 1, curr_predict)
 
-            # randomize = np.arange(len(beam_batch[0]))
-            # np.random.shuffle(randomize)
-            # beam_batch[0] = [beam_batch[0][i] for i in randomize]
-            # beam_batch[1] = [beam_batch[1][i] for i in randomize]
-            # y_hat_batch = [y_hat_batch[i] for i in randomize]
-            #
-            # for itr in range(0, len(beam_batch[0]), 10):
-            #     inputs = [np.array([beam_batch[0][itr * 10 + idx] for idx in range(min(10, len(beam_batch[0]) - itr))]),
-            #               np.array([beam_batch[1][itr * 10 + idx] for idx in range(min(10, len(beam_batch[0]) - itr))])]
-            #     loss = self._decomposable.train_on_batch(inputs,
-            #                                              np.array([y_hat_batch[itr * 10 + idx] for idx
-            #                                                        in range(min(10, len(beam_batch[0]) - itr))]),
-            #                                              class_weight=self._class_weight)
-            #
-            # if self._train_step_count % num_of_steps_between_prints == 0:
-            #     beam_batch[0] = np.array(beam_batch[0])
-            #     beam_batch[1] = np.array(beam_batch[1])
-            #     predictions = self._decomposable.predict(beam_batch, batch_size=len(beam_batch[0]),
-            #                                              verbose=0)
-            #     for idx, (curr_predict, curr_y_hat) in enumerate(zip(predictions, y_hat)):
-            #         full_decision_for_print = ''
-            #         for decision in beam._paths[idx].decisions:
-            #             full_decision_for_print += ' ' + decision._name
-            #         print 'desicion:' + full_decision_for_print
-            #         print 'Predicted: {} Golden: {} Prediction: {}'.format(
-            #             curr_predict[0] < curr_predict[1], curr_y_hat[1] == 1, curr_predict)
-            #         print ''
-            #     print 'loss: {}'.format(loss)
-
+        self._tb_logger.log('decomposableLoss', loss, self.step)
+        self._tb_logger.log('decomposableAccuracy', accuracy, self.step)
