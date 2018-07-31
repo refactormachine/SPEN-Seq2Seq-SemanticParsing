@@ -61,6 +61,7 @@ class Decoder(object):
         self._predicate_embedder_type = predicate_embedder_type
         self.correct_predictions = 0
         self.all_predictions = 0
+        self._decomposable_data = None
 
         # Normalization and update policy
         self._normalization = config.normalization
@@ -104,6 +105,10 @@ class Decoder(object):
     @property
     def predicate_dictionary(self):
         return self._predicate2index
+
+    @property
+    def decomposable_data(self):
+        return self._decomposable_data
 
     @staticmethod
     def _build_predicate_dictionary(predicates):
@@ -230,7 +235,7 @@ class Decoder(object):
         # sample a beam of logical forms for each example
         beams = self.predictions(examples, train=True)
 
-        self.train_decomposable_batches(beams, examples)
+        self._decomposable_data = self.train_decomposable_batches(beams, examples)
 
         all_cases = []  # a list of ParseCases to give to ParseModel
         all_case_weights = []  # the weights associated with the cases
@@ -304,6 +309,8 @@ class Decoder(object):
         beam_batch = [[], []]
         y_hat_batch = []
         decisions = []
+        utterances = []
+        world_states = []
 
         for example, beam in zip(examples, beams):
             if len(beam._paths) == 0:
@@ -336,19 +343,22 @@ class Decoder(object):
                 self.correct_predictions += check_denote
                 self.all_predictions += 1
 
-                decisions_embedder = self.decisions_embedder(path.decisions, path._cases)
+                # decisions_embedder = self.decisions_embedder(path.decisions, path._cases)
 
                 beam_batch[0].append(utter_embds)
-                beam_batch[1].append(decisions_embedder)
+                # beam_batch[1].append(decisions_embedder)
                 full_decision_for_print = ''
 
                 for decision in path.decisions:
                     full_decision_for_print += ' ' + decision._name
+
                 decisions.append(full_decision_for_print)
+                utterances.append(sentence_for_print)
+                world_states.append(world_state)
 
                 if check_denote:
                     beam_batch_correct[0].append(utter_embds)
-                    beam_batch_correct[1].append(decisions_embedder)
+                    # beam_batch_correct[1].append(decisions_embedder)
                     indexes.append(idx)
 
             # at least one correct path
@@ -366,17 +376,21 @@ class Decoder(object):
         beam_batch[0] = np.array(beam_batch[0])
         beam_batch[1] = np.array(beam_batch[1])
         y_hat_batch = np.array(y_hat_batch)
-        loss, accuracy = self._decomposable.train_on_batch(beam_batch, y_hat_batch, class_weight=self._class_weight)
+        # loss, accuracy = self._decomposable.train_on_batch(beam_batch, y_hat_batch, class_weight=self._class_weight)
 
-        if self._train_step_count % num_of_steps_between_prints == 0:
-            predictions = self._decomposable.predict(beam_batch, batch_size=len(beam_batch[0]),
-                                                     verbose=0)
-            print 'utter: ' + sentence_for_print
-            print 'world state:' + world_state
-            for idx, (curr_predict, curr_y_hat) in enumerate(zip(predictions, y_hat_batch)):
-                print 'decision:' + decisions[idx]
-                print 'Predicted: {} Golden: {} Prediction: {}\n'.format(
-                    curr_predict[0] < curr_predict[1], curr_y_hat[1] == 1, curr_predict)
+        decomposable_data = [[utter, dec, y[1]] for utter, dec, y in zip(utterances, decisions, y_hat_batch)]
 
-        self._tb_logger.log('decomposableLoss', loss, self.step)
-        self._tb_logger.log('decomposableAccuracy', accuracy, self.step)
+        # if self._train_step_count % num_of_steps_between_prints == 0:
+        #     predictions = self._decomposable.predict(beam_batch, batch_size=len(beam_batch[0]),
+        #                                              verbose=0)
+        #     for idx, (curr_predict, curr_y_hat) in enumerate(zip(predictions, y_hat_batch)):
+        #         print 'utter: ' + utterances[idx]
+        #         print 'world state:' + world_states[idx]
+        #         print 'decision:' + decisions[idx]
+        #         print 'Predicted: {} Golden: {} Prediction: {}\n'.format(
+        #             curr_predict[0] < curr_predict[1], curr_y_hat[1] == 1, curr_predict)
+
+        # self._tb_logger.log('decomposableLoss', loss, self.step)
+        # self._tb_logger.log('decomposableAccuracy', accuracy, self.step)
+
+        return decomposable_data
