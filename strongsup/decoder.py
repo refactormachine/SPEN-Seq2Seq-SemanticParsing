@@ -1,7 +1,11 @@
+import csv
+import glob
+import os
 from collections import namedtuple
 
 import numpy as np
 import tensorflow as tf
+from gtd.chrono import verboserate
 from gtd.utils import flatten
 
 from strongsup.case_weighter import get_case_weighter
@@ -45,10 +49,10 @@ class Decoder(object):
         self._glove_embeddings = glove_embeddings
         self._parse_model = parse_model
         self._value_function = get_value_function(
-            config.value_function, parse_model.parse_model)
+            config.value_function, parse_model.parse_model) if parse_model else None
         self._case_weighter = get_case_weighter(
             config.case_weighter, parse_model.parse_model,
-            self._value_function)
+            self._value_function) if parse_model else None
         self._config = config
         self._caching = config.inputs_caching
         self._domain = domain
@@ -70,8 +74,8 @@ class Decoder(object):
         self._predicate2index = self._build_predicate_dictionary(predicates)
 
         # 100 is the glove embedding length per word
-        shape_utt = (self._utter_len, 100, 2)
-        shape_path = (self._max_stack_size, len(self.predicate_dictionary), 2) if \
+        shape_utt = (None, 100, 2)
+        shape_path = (None, len(self.predicate_dictionary), 2) if \
             self._predicate_embedder_type == 'one_hot' else (self._max_stack_size, 96, 2)
         settings = {'lr': 0.1, 'dropout': 0.2, 'gru_encode': True}
         self._decomposable = build_model(shape_utt, shape_path, settings)
@@ -191,7 +195,7 @@ class Decoder(object):
 
         for i, decision in enumerate(decisions):
             one_hot_decision = np.zeros(shape=len(pred_dict))
-            one_hot_decision[pred_dict[decision.name]] = 1
+            one_hot_decision[pred_dict[decision]] = 1
             one_hot_decisions[i] = one_hot_decision
         return np.array(one_hot_decisions)
 
@@ -266,10 +270,10 @@ class Decoder(object):
         self._parse_model.train_step(
             cases_to_reinforce, weights_to_reinforce, caching=False)
 
-    def decisions_embedder(self, path_decisions, path_cases=None):
+    def decisions_embedder(self, decisions, path_cases=None):
         """
         predicate_embedder_type can either be 'one_hot' or 'stack_embedder'
-        :param path_decisions: path._decisions from the beam path
+        :param decisions: path._decisions.name from the beam path
         :param path_cases: path._cases from the beam path
         :return:
         """
@@ -289,7 +293,7 @@ class Decoder(object):
             decisions_embedder = result['stack_embedder']  # stack_embedder_dim:96
             dim = 96
         else:  # assume it's 'one_hot'
-            decisions_embedder = self.decisions_to_one_hot(path_decisions)
+            decisions_embedder = self.decisions_to_one_hot(decisions)
             dim = len(self.predicate_dictionary)
 
         decisions_embedder = np.concatenate((
@@ -343,7 +347,8 @@ class Decoder(object):
                 self.correct_predictions += check_denote
                 self.all_predictions += 1
 
-                # decisions_embedder = self.decisions_embedder(path.decisions, path._cases)
+                # decisions_embedder = self.decisions_embedder([decision.name for decision in path.decisions],
+                #                                              path._cases)
 
                 beam_batch[0].append(utter_embds)
                 # beam_batch[1].append(decisions_embedder)
@@ -394,3 +399,56 @@ class Decoder(object):
         # self._tb_logger.log('decomposableAccuracy', accuracy, self.step)
 
         return decomposable_data
+
+    def train_decomposable_from_csv(self, csv_folder):
+        self._train_step_count += 1
+
+        files = glob.glob(os.path.join(csv_folder, '*'))
+        files = sorted(files)
+        step = 0
+
+        for f in verboserate(files, desc='Training on csv files', total=len(files)):
+            with open(f, 'rt') as csvfile:
+                csv_reader = csv.reader(csvfile, delimiter=',')
+                header = True
+
+                for utterance, decision, y_hat in csv_reader:
+                    if header:
+                        header = False
+                        continue
+                    step += 1
+                    self.train_decomposable_on_example(utterance, decision, int(y_hat), step)
+
+    def train_decomposable_on_example(self, utter, decisions, y_hat, step):
+        if self._train_step_count < 0:
+            return
+
+        beam_batch = [[], []]
+        decisions = decisions.split()
+
+        utter_embds = []
+        for token in utter.split():
+            utter_embds += [self._glove_embeddings[token]]
+
+        utter_embds = np.array(utter_embds)
+        # utter_embds = np.concatenate((
+        #     utter_embds,
+        #     np.full((self._utter_len - len(utter_embds), 100), 0.)
+        # ))
+
+        y_hat_vec = [0, 0]
+        y_hat_vec[y_hat] = 1
+        decisions_embedder = self.decisions_embedder(decisions)
+
+        beam_batch[0].append(utter_embds)
+        beam_batch[1].append(decisions_embedder)
+        beam_batch[0] = np.array(beam_batch[0])
+        beam_batch[1] = np.array(beam_batch[1])
+        y_hat_batch = [y_hat_vec]
+        y_hat_batch = np.array(y_hat_batch)
+        loss, accuracy = self._decomposable.train_on_batch(beam_batch, y_hat_batch, class_weight=self._class_weight)
+
+        self._tb_logger.log('decomposableLoss', loss, step)
+        self._tb_logger.log('decomposableAccuracy', accuracy, step)
+
+        return None
