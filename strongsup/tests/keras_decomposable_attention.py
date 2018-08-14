@@ -10,7 +10,7 @@ from keras.layers.advanced_activations import ELU
 import keras.backend as K
 from keras.models import Sequential, Model, model_from_json
 from keras.regularizers import l2
-from keras.optimizers import Adam
+from keras.optimizers import Adam, Adagrad
 from keras.layers.normalization import BatchNormalization
 from keras.layers.pooling import GlobalAveragePooling1D, GlobalMaxPooling1D
 from keras.layers import Merge
@@ -61,7 +61,7 @@ def build_model(shape_utt, shape_path, settings):
 
     # ...Compile it...
     model.compile(
-        optimizer=Adam(lr=settings['lr']),
+        optimizer=Adagrad(lr=settings['lr']),
         loss='categorical_crossentropy',
         metrics=['accuracy'])
     # ...And return it for training.

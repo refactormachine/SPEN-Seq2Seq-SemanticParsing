@@ -35,7 +35,8 @@ class Decoder(object):
     """
 
     def __init__(self, parse_model, config, domain, glove_embeddings, predicates,
-                 utter_len, max_stack_size, tb_logger, predicate_embedder_type='one_hot'):
+                 utter_len, max_stack_size, tb_logger,
+                 predicate_embedder_type='one_hot', decomposable_weights_file=None):
         """Create a new decoder.
 
         Args:
@@ -67,6 +68,7 @@ class Decoder(object):
         self.correct_predictions = 0
         self.all_predictions = 0
         self._decomposable_data = None
+        self._decomposable_weights_file = decomposable_weights_file
 
         # Normalization and update policy
         self._normalization = config.normalization
@@ -78,8 +80,11 @@ class Decoder(object):
         shape_utt = (None, 100, 2)
         shape_path = (None, len(self.predicate_dictionary), 2) if \
             self._predicate_embedder_type == 'one_hot' else (self._max_stack_size, 96, 2)
-        settings = {'lr': 0.01, 'dropout': 0.2, 'gru_encode': True}
+        settings = {'lr': 0.1, 'dropout': 0.2, 'gru_encode': True}
         self._decomposable = build_model(shape_utt, shape_path, settings)
+
+        if decomposable_weights_file and os.path.isfile(decomposable_weights_file):
+            self._decomposable.load_weights(decomposable_weights_file)
 
         # Exploration policy
         # TODO: Resolve this circular import differently
@@ -430,12 +435,19 @@ class Decoder(object):
                     curr_y_hats.append(y_hats[j])
                 self.train_decomposable_on_example(curr_utterances, curr_decisions, curr_y_hats, i)
 
+                if i % 1000 == 0:
+                    self._decomposable.save_weights(self._decomposable_weights_file)
+
     def train_decomposable_on_example(self, utters, decisions, y_hats, step):
         if self._train_step_count < 0:
             return
 
         beam_batch = [[], []]
         y_hat_batch = []
+
+        # for layer in self._decomposable.layers:
+        #     weights = layer.get_weights()
+        #     print weights
 
         for decision, utter, y_hat in zip(decisions, utters, y_hats):
             decision_tokens = decision.split()
@@ -461,7 +473,7 @@ class Decoder(object):
         beam_batch[1] = np.array(beam_batch[1])
         y_hat_batch = np.array(y_hat_batch)
 
-        loss, accuracy = self._decomposable.train_on_batch(beam_batch, y_hat_batch, class_weight=self._class_weight)
+        loss, accuracy = self._decomposable.train_on_batch(beam_batch, y_hat_batch)
         # if i % 100 == 0:
         #     print 'loss: ' + str(loss) + ' accuracy: ' + str(accuracy)
 

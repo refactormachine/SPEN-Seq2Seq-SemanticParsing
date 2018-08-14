@@ -24,11 +24,14 @@ utterance_length = config.parse_model.utterance_embedder.utterance_length
 utterance_num = config.parse_model.utterance_embedder.utterance_num
 iterations_per_utterance = config.decoder.train_exploration_policy.iterations_per_utterance
 tb_logger = TensorBoardLogger(os.path.join(os.getcwd(), 'data', 'decomposable', 'tensorboard'))
+decomposable_weights_file = os.path.join(os.getcwd(), 'data', 'decomposable', 'decomposable_weights.hdf5')
 
 decoder = Decoder(None, config.decoder, domain, glove_embeddings, domain.fixed_predicates,
                   utterance_length * utterance_num,
                   iterations_per_utterance * utterance_num,
-                  tb_logger
+                  tb_logger,
+                  decomposable_weights_file=decomposable_weights_file
                   )
 
-decoder.train_decomposable_from_csv(os.path.join(os.getcwd(), 'data', 'decomposable', 'train-decomposable.csv'))
+csv_file = os.path.join(os.getcwd(), 'data', 'decomposable', 'train-decomposable.csv')
+decoder.train_decomposable_from_csv(csv_file)
