@@ -31,4 +31,4 @@ decoder = Decoder(None, config.decoder, domain, glove_embeddings, domain.fixed_p
                   tb_logger
                   )
 
-decoder.train_decomposable_from_csv(os.path.join(os.getcwd(), 'data', 'decomposable'))
+decoder.train_decomposable_from_csv(os.path.join(os.getcwd(), 'data', 'decomposable', 'train-decomposable.csv'))

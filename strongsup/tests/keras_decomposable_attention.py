@@ -22,7 +22,7 @@ def build_model(shape_utt, shape_path, settings):
     max_length_path, nr_hidden_path, nr_class_path = shape_path
     nr_hidden_output = min(nr_hidden_utt, nr_hidden_path)
 
-    nr_hidden_output = 300
+    nr_hidden_output = 15
     
     # Declare inputs.
     utterance_inp = Input(shape=(max_length_utt,nr_hidden_utt,), dtype='float32', name='words1')

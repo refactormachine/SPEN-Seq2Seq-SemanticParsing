@@ -77,7 +77,7 @@ class Decoder(object):
         shape_utt = (None, 100, 2)
         shape_path = (None, len(self.predicate_dictionary), 2) if \
             self._predicate_embedder_type == 'one_hot' else (self._max_stack_size, 96, 2)
-        settings = {'lr': 0.1, 'dropout': 0.2, 'gru_encode': True}
+        settings = {'lr': 0.01, 'dropout': 0.2, 'gru_encode': True}
         self._decomposable = build_model(shape_utt, shape_path, settings)
 
         # Exploration policy
@@ -400,55 +400,62 @@ class Decoder(object):
 
         return decomposable_data
 
-    def train_decomposable_from_csv(self, csv_folder):
+    def train_decomposable_from_csv(self, csv_file):
         self._train_step_count += 1
 
-        files = glob.glob(os.path.join(csv_folder, '*'))
-        files = sorted(files)
-        step = 0
+        with open(csv_file, 'rt') as csvfile:
+            csv_reader = csv.reader(csvfile, delimiter=',')
+            utterances = []
+            decisions = []
+            y_hats = []
+            batch_size = 30
 
-        for f in verboserate(files, desc='Training on csv files', total=len(files)):
-            with open(f, 'rt') as csvfile:
-                csv_reader = csv.reader(csvfile, delimiter=',')
-                header = True
+            for step, (utterance, decision, y_hat) in enumerate(csv_reader, start=1):
+                utterances.append(utterance)
+                decisions.append(decision)
+                y_hats.append(int(y_hat))
 
-                for utterance, decision, y_hat in csv_reader:
-                    if header:
-                        header = False
-                        continue
-                    step += 1
-                    self.train_decomposable_on_example(utterance, decision, int(y_hat), step)
+                # if step % batch_size == 0:
+                #     self.train_decomposable_on_example(utterances, decisions, y_hats, step / batch_size)
+                #     utterances = []
+                #     decisions = []
+                #     y_hats = []
 
-    def train_decomposable_on_example(self, utter, decisions, y_hat, step):
+    def train_decomposable_on_example(self, utters, decisions, y_hats, step):
         if self._train_step_count < 0:
             return
 
         beam_batch = [[], []]
-        decisions = decisions.split()
+        y_hat_batch = []
 
-        utter_embds = []
-        for token in utter.split():
-            utter_embds += [self._glove_embeddings[token]]
+        for decision, utter, y_hat in zip(decisions, utters, y_hats):
+            decision_tokens = decision.split()
 
-        utter_embds = np.array(utter_embds)
-        # utter_embds = np.concatenate((
-        #     utter_embds,
-        #     np.full((self._utter_len - len(utter_embds), 100), 0.)
-        # ))
+            utter_embds = []
+            for token in utter.split():
+                utter_embds += [self._glove_embeddings[token]]
 
-        y_hat_vec = [0, 0]
-        y_hat_vec[y_hat] = 1
-        decisions_embedder = self.decisions_embedder(decisions)
+            utter_embds = np.array(utter_embds)
+            utter_embds = np.concatenate((
+                utter_embds,
+                np.full((self._utter_len - len(utter_embds), 100), 0.)
+            ))
 
-        beam_batch[0].append(utter_embds)
-        beam_batch[1].append(decisions_embedder)
+            y_hat_vec = [0, 0]
+            y_hat_vec[y_hat] = 1
+            decisions_embedder = self.decisions_embedder(decision_tokens)
+
+            beam_batch[0].append(utter_embds)
+            beam_batch[1].append(decisions_embedder)
+            y_hat_batch.append(y_hat_vec)
         beam_batch[0] = np.array(beam_batch[0])
         beam_batch[1] = np.array(beam_batch[1])
-        y_hat_batch = [y_hat_vec]
         y_hat_batch = np.array(y_hat_batch)
+
         loss, accuracy = self._decomposable.train_on_batch(beam_batch, y_hat_batch, class_weight=self._class_weight)
+        # if i % 100 == 0:
+        #     print 'loss: ' + str(loss) + ' accuracy: ' + str(accuracy)
 
         self._tb_logger.log('decomposableLoss', loss, step)
         self._tb_logger.log('decomposableAccuracy', accuracy, step)
 
-        return None

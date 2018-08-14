@@ -268,11 +268,11 @@ class Experiment(gtd.ml.experiment.TFExperiment):
 
     @property
     def decomposable_csv(self):
-        if not self._decomposable_csv:
+        # if not self._decomposable_csv:
             # first run - clean decomposable data directory
-            files = glob.glob(os.path.join(DataDirectory.decomposable, '*'))
-            for f in files:
-                os.remove(f)
+            # files = glob.glob(os.path.join(DataDirectory.decomposable, '*'))
+            # for f in files:
+                # os.remove(f)
         filename = os.path.join(DataDirectory.decomposable, 'decomposable%s.csv')
         self._decomposable_csv = filename % self._train_loop_count
         return self._decomposable_csv
