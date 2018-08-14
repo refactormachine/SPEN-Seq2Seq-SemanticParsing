@@ -1,6 +1,7 @@
 import csv
 import glob
 import os
+import random
 from collections import namedtuple
 
 import numpy as np
@@ -410,16 +411,24 @@ class Decoder(object):
             y_hats = []
             batch_size = 30
 
-            for step, (utterance, decision, y_hat) in enumerate(csv_reader, start=1):
+            for utterance, decision, y_hat in csv_reader:
                 utterances.append(utterance)
                 decisions.append(decision)
                 y_hats.append(int(y_hat))
 
-                # if step % batch_size == 0:
-                #     self.train_decomposable_on_example(utterances, decisions, y_hats, step / batch_size)
-                #     utterances = []
-                #     decisions = []
-                #     y_hats = []
+            file_len = len(decisions)
+
+            for i in xrange(10000):
+                batch_indices = random.sample(xrange(1, file_len), batch_size)
+                curr_utterances = []
+                curr_decisions = []
+                curr_y_hats = []
+
+                for j in batch_indices:
+                    curr_utterances.append(utterances[j])
+                    curr_decisions.append(decisions[j])
+                    curr_y_hats.append(y_hats[j])
+                self.train_decomposable_on_example(curr_utterances, curr_decisions, curr_y_hats, i)
 
     def train_decomposable_on_example(self, utters, decisions, y_hats, step):
         if self._train_step_count < 0:
