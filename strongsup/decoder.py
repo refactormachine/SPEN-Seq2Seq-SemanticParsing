@@ -310,54 +310,26 @@ class Decoder(object):
         return decisions_embedder
 
     def train_decomposable_batches(self, beams, examples):
-        self._train_step_count += 1
-        num_of_steps_between_prints = 10
-
-        if self._train_step_count < 0:
-            return
-
-        beam_batch = [[], []]
         y_hat_batch = []
         decisions = []
         utterances = []
-        world_states = []
 
         for example, beam in zip(examples, beams):
             if len(beam._paths) == 0:
                 continue
 
             beam_batch_correct = [[], []]
-            indexes = []
-            utter_embds = []
             sentence_for_print = ''
+
             for utter in beam._paths[0].context.utterances:
                 for token in utter._tokens:
-                    utter_embds += [self._glove_embeddings[token]]
                     sentence_for_print += token + ' '
 
-            utter_embds = np.array(utter_embds)
-            world_state = ''
-            for currObject in example.context.world.initial_state.all_objects:
-                world_state += ' ' + str(currObject.position) + ':' + currObject.shape
-
-            utter_embds = np.concatenate((
-                utter_embds,
-                np.full((self._utter_len - len(utter_embds), 100), 0.)
-            ))
-
-            for idx, path in enumerate(beam._paths):
+            for path in beam._paths:
                 check_denote = int(check_denotation(example.answer, path.finalized_denotation))
                 y_hat = [0, 0]
                 y_hat[check_denote] = 1
                 y_hat_batch.append(y_hat)
-                self.correct_predictions += check_denote
-                self.all_predictions += 1
-
-                # decisions_embedder = self.decisions_embedder([decision.name for decision in path.decisions],
-                #                                              path._cases)
-
-                beam_batch[0].append(utter_embds)
-                # beam_batch[1].append(decisions_embedder)
                 full_decision_for_print = ''
 
                 for decision in path.decisions:
@@ -365,44 +337,13 @@ class Decoder(object):
 
                 decisions.append(full_decision_for_print)
                 utterances.append(sentence_for_print)
-                world_states.append(world_state)
-
-                if check_denote:
-                    beam_batch_correct[0].append(utter_embds)
-                    # beam_batch_correct[1].append(decisions_embedder)
-                    indexes.append(idx)
 
             # at least one correct path
             if not beam_batch_correct[0]:
                 continue
 
-            y_hat_new = np.zeros((len(indexes), 2), dtype='int32')
-
-            for i in range(len(indexes)):
-                y_hat_new[i, 1] = 1
-
-        beam_batch_correct[0] = np.array(beam_batch_correct[0])
-        beam_batch_correct[1] = np.array(beam_batch_correct[1])
-
-        beam_batch[0] = np.array(beam_batch[0])
-        beam_batch[1] = np.array(beam_batch[1])
         y_hat_batch = np.array(y_hat_batch)
-        # loss, accuracy = self._decomposable.train_on_batch(beam_batch, y_hat_batch, class_weight=self._class_weight)
-
         decomposable_data = [[utter, dec, y[1]] for utter, dec, y in zip(utterances, decisions, y_hat_batch)]
-
-        # if self._train_step_count % num_of_steps_between_prints == 0:
-        #     predictions = self._decomposable.predict(beam_batch, batch_size=len(beam_batch[0]),
-        #                                              verbose=0)
-        #     for idx, (curr_predict, curr_y_hat) in enumerate(zip(predictions, y_hat_batch)):
-        #         print 'utter: ' + utterances[idx]
-        #         print 'world state:' + world_states[idx]
-        #         print 'decision:' + decisions[idx]
-        #         print 'Predicted: {} Golden: {} Prediction: {}\n'.format(
-        #             curr_predict[0] < curr_predict[1], curr_y_hat[1] == 1, curr_predict)
-
-        # self._tb_logger.log('decomposableLoss', loss, self.step)
-        # self._tb_logger.log('decomposableAccuracy', accuracy, self.step)
 
         return decomposable_data
 
