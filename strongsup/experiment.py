@@ -308,9 +308,6 @@ class Experiment(gtd.ml.experiment.TFExperiment):
     def save_decomposable_data_to_csv(self, decomposable_data):
         with open(self.decomposable_csv, 'at') as csv_file:
             csv_writer = csv.writer(csv_file, delimiter=',', quoting=csv.QUOTE_MINIMAL)
-            # first run - print header
-            if self.decoder.step == 1:
-                csv_writer.writerow(['Utterances', 'Decisions', 'Y_Hat'])
             for decom in decomposable_data:
                 csv_writer.writerow(decom)
 
