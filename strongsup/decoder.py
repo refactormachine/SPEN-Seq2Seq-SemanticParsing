@@ -1,16 +1,14 @@
 import csv
-import glob
 import os
 import random
 from collections import namedtuple
 
 import numpy as np
 import tensorflow as tf
-from gtd.chrono import verboserate
 from gtd.utils import flatten
 
 from strongsup.case_weighter import get_case_weighter
-from strongsup.tests.keras_decomposable_attention import build_model
+from strongsup.decomposable import decomposable_model_generation
 from strongsup.value import check_denotation
 from strongsup.value_function import get_value_function, ValueFunctionExample
 
@@ -77,11 +75,11 @@ class Decoder(object):
         self._predicate2index = self._build_predicate_dictionary(predicates)
 
         # 100 is the glove embedding length per word
-        shape_utt = (None, 100, 2)
-        shape_path = (None, len(self.predicate_dictionary), 2) if \
-            self._predicate_embedder_type == 'one_hot' else (self._max_stack_size, 96, 2)
-        settings = {'lr': 0.1, 'dropout': 0.2, 'gru_encode': True}
-        self._decomposable = build_model(shape_utt, shape_path, settings)
+        shape_utt = (self._utter_len, 100)
+        shape_path = (self._max_stack_size, len(self.predicate_dictionary)) if \
+            self._predicate_embedder_type == 'one_hot' else (self._max_stack_size, 96)
+        settings = {'lr': 0.1}
+        self._decomposable = decomposable_model_generation(shape_utt, shape_path, settings)
 
         if decomposable_weights_file and os.path.isfile(decomposable_weights_file):
             self._decomposable.load_weights(decomposable_weights_file)
@@ -326,9 +324,9 @@ class Decoder(object):
 
             for path in beam._paths:
                 check_denote = int(check_denotation(example.answer, path.finalized_denotation))
-                y_hat = [0, 0]
-                y_hat[check_denote] = 1
-                curr_y_hat_batch.append(y_hat)
+                # y_hat = [0, 0]
+                # y_hat[check_denote] = 1
+                curr_y_hat_batch.append(check_denote)
                 full_decision_for_print = ''
 
                 if check_denote:
@@ -405,10 +403,10 @@ class Decoder(object):
                 curr_utterances, curr_decisions, curr_y_hats, curr_beam_scores = [], [], [], []
 
                 for j in batch_indices:
-                    curr_utterances.append(utterances[j])
-                    curr_decisions.append(decisions[j])
-                    curr_y_hats.append(y_hats[j])
-                    curr_beam_scores.append(beam_scores[j])
+                    curr_utterances.extend(utterances[j])
+                    curr_decisions.extend(decisions[j])
+                    curr_y_hats.extend(y_hats[j])
+                    curr_beam_scores.extend(beam_scores[j])
                     # TODO: TBD how to send these parameters
                 self.train_decomposable_on_example(curr_utterances, curr_decisions, curr_y_hats, curr_beam_scores, i)
 
@@ -439,13 +437,14 @@ class Decoder(object):
                 np.full((self._utter_len - len(utter_embds), 100), 0.)
             ))
 
-            y_hat_vec = [0, 0]
-            y_hat_vec[y_hat] = 1
+            # y_hat_vec = [0, 0]
+            # y_hat_vec[y_hat] = 1
             decisions_embedder = self.decisions_embedder(decision_tokens)
 
             beam_batch[0].append(utter_embds)
             beam_batch[1].append(decisions_embedder)
-            y_hat_batch.append(y_hat_vec)
+            # y_hat_batch.append(y_hat_vec)
+            y_hat_batch.append(y_hat)
         beam_batch[0] = np.array(beam_batch[0])
         beam_batch[1] = np.array(beam_batch[1])
         y_hat_batch = np.array(y_hat_batch)
