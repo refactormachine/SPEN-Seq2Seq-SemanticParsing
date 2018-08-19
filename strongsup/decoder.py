@@ -316,7 +316,7 @@ class Decoder(object):
 
             beam_batch_correct = False
             sentence_for_print = ''
-            curr_decisions, curr_utterances, curr_y_hat_batch, curr_beam_scores = []
+            curr_decisions, curr_utterances, curr_y_hat_batch, curr_beam_scores = [], [], [], []
 
             for utter in beam._paths[0].context.utterances:
                 for token in utter._tokens:
@@ -364,7 +364,7 @@ class Decoder(object):
             y_hat_batch.extend(curr_y_hat_batch)
             beam_scores.extend(curr_beam_scores)
 
-        decomposable_data = [[utter, dec, y[1], score]
+        decomposable_data = [[utter, dec, y, score]
                              for utter, dec, y, score in zip(utterances, decisions, y_hat_batch, beam_scores)]
 
         return decomposable_data
