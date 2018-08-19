@@ -4,6 +4,6 @@ BASE_DIR=$(cd $(dirname $0);pwd -P)
 export STRONGSUP_DIR=${BASE_DIR}/data
 export CUDA_VISIBLE_DEVICES=$1
 echo "=================== Start running script ==================="
-echo "using cpu $1"
+echo "Using GPU $1"
 PYTHONPATH=${BASE_DIR}:${BASE_DIR}/third-party/gtd/ python ${BASE_DIR}/scripts/main.py ${BASE_DIR}/configs/rlong/best-tangrams.txt
 echo "=================== Finish running script ==================="
