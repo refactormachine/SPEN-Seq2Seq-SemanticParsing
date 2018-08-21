@@ -349,7 +349,7 @@ class Decoder(object):
             while len(curr_decisions) < BLOCK_SIZE:
                 curr_decisions.append(full_decision_for_print)
                 curr_utterances.append(sentence_for_print)
-                curr_y_hat_batch.append([0, 0])
+                curr_y_hat_batch.append(0)
                 curr_beam_scores.append(float('-inf'))
 
             # slice to size BLOCK_SIZE
