@@ -19,11 +19,11 @@ def decomposable_model_generation(shape_utt, shape_path, settings):
     utterance_inp = Input(shape=(max_length_utt, hidden_utt_num,), dtype='float32', name='uttr_inp')
     path_inp = Input(shape=(max_length_path, hidden_path_num,), dtype='float32', name='path_inp')
 
-    encode_utt = biLSTM(max_length_utt, hidden_len, hidden_utt_num)
-    encode_path = biLSTM(max_length_path, hidden_len, hidden_path_num)
-    attend = DecAttention(max_length_utt, max_length_path, hidden_len)
+    encode_utt = BiLSTM(max_length_utt, hidden_len, hidden_utt_num)
+    encode_path = BiLSTM(max_length_path, hidden_len, hidden_path_num)
+    attend = Attention(max_length_utt, max_length_path, hidden_len)
     align = Alignment(hidden_len)
-    compare = CompareandAgregate(hidden_len)
+    compare = CompareAndAggregate(hidden_len)
     output_score = Ranker(hidden_len)
 
     uttr_enc = encode_utt(utterance_inp)
@@ -49,7 +49,7 @@ def decomposable_model_generation(shape_utt, shape_path, settings):
     return decomposable_model
 
 
-class biLSTM(object):
+class BiLSTM(object):
     def __init__(self, max_length, out_len, in_len):
         self.model = Sequential()
         self.model.add(Bidirectional(LSTM(out_len, return_sequences=True),
@@ -60,7 +60,7 @@ class biLSTM(object):
         return self.model(sentence)
 
 
-class DecAttention(object):
+class Attention(object):
     def __init__(self, max_length_utt, max_length_path, hidden_len):
         self.max_length_utt = max_length_utt
         self.max_length_path = max_length_path
@@ -79,15 +79,15 @@ class DecAttention(object):
 
         self.model_path = TimeDistributed(self.model_path)
 
-    def __call__(self, uttr, path):
+    def __call__(self, utter, path):
         # attend step that skips the quadratic complexity of normal attention
-        def mergeMod(UttPath):
-            bitwise_attention = K.batch_dot(UttPath[1], K.permute_dimensions(UttPath[0], (0, 2, 1)))
+        def merge_mode(utter_path):
+            bitwise_attention = K.batch_dot(utter_path[1], K.permute_dimensions(utter_path[0], (0, 2, 1)))
             return K.permute_dimensions(bitwise_attention, (0, 2, 1))
 
         return merge(
-            [self.model_utt(uttr), self.model_path(path)],
-            mode=mergeMod,
+            [self.model_utt(utter), self.model_path(path)],
+            mode=merge_mode,
             output_shape=(self.max_length_utt, self.max_length_path))
 
 
@@ -98,20 +98,20 @@ class Alignment(object):
     def __call__(self, sentence, attentions_matrix, max_length, transpose=False):
         def normalization3d(attention_matrix_sentence):
             attention_matrix = attention_matrix_sentence[0]
-            sentence = attention_matrix_sentence[1]
+            att_sentence = attention_matrix_sentence[1]
             if transpose:
                 attention_matrix = K.permute_dimensions(attention_matrix, (0, 2, 1))
             # softmax attention
             exp_mat = K.exp(attention_matrix - K.max(attention_matrix, axis=-1, keepdims=True))
             sum_mat = K.sum(exp_mat, axis=-1, keepdims=True)
             softmax_attention = exp_mat / sum_mat
-            return K.batch_dot(softmax_attention, sentence)
+            return K.batch_dot(softmax_attention, att_sentence)
 
         return merge([attentions_matrix, sentence], mode=normalization3d,
                      output_shape=(max_length, self.hidden_len))
 
 
-class CompareandAgregate(object):
+class CompareAndAggregate(object):
     def __init__(self, hidden_len):
         self.model_utt = Sequential()
         self.model_utt.add(Dense(hidden_len, name='compareutt', input_shape=(hidden_len * 2,),
@@ -125,8 +125,8 @@ class CompareandAgregate(object):
         self.model_path.add(Activation('relu'))
         self.model_path = TimeDistributed(self.model_path)
 
-    def __call__(self, sent, align, max_len, type, **kwargs):
-        if type == 0:
+    def __call__(self, sent, align, max_len, model_type, **kwargs):
+        if model_type == 0:
             result = self.model_utt(merge([sent, align], mode='concat'))
         else:
             result = self.model_path(merge([sent, align], mode='concat'))
@@ -143,8 +143,8 @@ class Ranker(object):
         self.model.add(Activation('relu'))
         self.model.add(Dense(1, name='ranker', activation='softmax', init='he_normal'))
 
-    def __call__(self, compare_uttr, compare_path):
-        ranker = merge([compare_uttr, compare_path], mode='concat')
+    def __call__(self, compare_utter, compare_path):
+        ranker = merge([compare_utter, compare_path], mode='concat')
         ranker = self.model(ranker)
         ranker = BatchNormalization()(ranker)
         return ranker
