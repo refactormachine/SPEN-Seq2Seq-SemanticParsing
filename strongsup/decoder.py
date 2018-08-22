@@ -397,8 +397,8 @@ class Decoder(object):
                     lines_in_block = 0
 
             num_batches = len(decisions)
-
-            for i in xrange(10000):
+            num_of_accurate_predictions = 0
+            for i in xrange(1000000):
                 batch_indices = random.sample(xrange(1, num_batches), BATCH_SIZE)
                 curr_utterances, curr_decisions, curr_y_hats, curr_beam_scores = [], [], [], []
 
@@ -408,10 +408,13 @@ class Decoder(object):
                     curr_y_hats.extend(y_hats[j])
                     curr_beam_scores.extend(beam_scores[j])
                     # TODO: TBD how to send these parameters
-                self.train_decomposable_on_example(curr_utterances, curr_decisions, curr_y_hats, curr_beam_scores, i)
+                    num_of_accurate_predictions += \
+                        self.train_decomposable_on_example(curr_utterances, curr_decisions, curr_y_hats, curr_beam_scores, i)
 
                 if i % 1000 == 0:
                     self._decomposable.save_weights(self._decomposable_weights_file)
+                    self._tb_logger.log('decomposableAccuracy', num_of_accurate_predictions, i)
+                    num_of_accurate_predictions = 0
 
     def train_decomposable_on_example(self, utters, decisions, y_hats, beam_scores, step):
         if self._train_step_count < 0:
@@ -459,6 +462,8 @@ class Decoder(object):
         # if i % 100 == 0:
         #     print 'loss: ' + str(loss) + ' accuracy: ' + str(accuracy)
         predicts = self._decomposable.predict_on_batch(beam_batch)
+
+        is_accurate = 1 if y_hat_batch[np.argmax(predicts)] == 1 else 0
         self._tb_logger.log('decomposableLoss', loss, step)
-        self._tb_logger.log('decomposableAccuracy', accuracy, step)
+        return is_accurate
 
