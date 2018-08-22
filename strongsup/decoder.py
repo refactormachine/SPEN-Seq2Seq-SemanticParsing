@@ -6,6 +6,7 @@ from collections import namedtuple
 import numpy as np
 import tensorflow as tf
 from gtd.utils import flatten
+from gtd.chrono import verboserate
 
 from strongsup.case_weighter import get_case_weighter
 from strongsup.decomposable import decomposable_model_generation
@@ -82,6 +83,7 @@ class Decoder(object):
         self._decomposable = decomposable_model_generation(shape_utt, shape_path, settings)
 
         if decomposable_weights_file and os.path.isfile(decomposable_weights_file):
+            print 'Using decomposable weights from file: {}'.format(decomposable_weights_file)
             self._decomposable.load_weights(decomposable_weights_file)
 
         # Exploration policy
@@ -398,7 +400,9 @@ class Decoder(object):
 
             num_batches = len(decisions)
             num_of_accurate_predictions = 0
-            for i in xrange(1000000):
+            iterations = verboserate(xrange(1000000), desc='Training decomposable model')
+
+            for i in iterations:
                 batch_indices = random.sample(xrange(1, num_batches), BATCH_SIZE)
                 curr_utterances, curr_decisions, curr_y_hats, curr_beam_scores = [], [], [], []
 
