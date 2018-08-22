@@ -409,7 +409,8 @@ class Decoder(object):
                     curr_beam_scores.extend(beam_scores[j])
                     # TODO: TBD how to send these parameters
                     num_of_accurate_predictions += \
-                        self.train_decomposable_on_example(curr_utterances, curr_decisions, curr_y_hats, curr_beam_scores, i)
+                        self.train_decomposable_on_example(curr_utterances, curr_decisions, curr_y_hats,
+                                                           curr_beam_scores, i)
 
                 if i % 1000 == 0:
                     self._decomposable.save_weights(self._decomposable_weights_file)
@@ -456,7 +457,6 @@ class Decoder(object):
         y_hat_batch = y_hat_batch[random_order]
         beam_batch[0] = beam_batch[0][random_order]
         beam_batch[1] = beam_batch[1][random_order]
-
 
         loss, accuracy = self._decomposable.train_on_batch(beam_batch, y_hat_batch)
         # if i % 100 == 0:

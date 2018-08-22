@@ -13,5 +13,6 @@ else
     echo "Using GPU $1"
     export CUDA_VISIBLE_DEVICES=$1
 fi
-PYTHONPATH=${BASE_DIR}:${BASE_DIR}/third-party/gtd/ python ${BASE_DIR}/scripts/main.py ${BASE_DIR}/configs/rlong/best-tangrams.txt
+
+PYTHONPATH=${BASE_DIR}:${BASE_DIR}/third-party/gtd/ python ${BASE_DIR}/scripts/main-decomposable.py ${BASE_DIR}/configs/rlong/best-tangrams.txt
 echo "=================== Finish running script ==================="

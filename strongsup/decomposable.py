@@ -1,13 +1,12 @@
 import keras
 import numpy
 
-from keras.layers import Input, Dense, merge, Lambda, BatchNormalization
+from keras.layers import Input, Dense, merge, Lambda, BatchNormalization, LeakyReLU
 from keras.layers import Activation, TimeDistributed
 from keras.layers import Bidirectional, LSTM
 import keras.backend as K
 from keras.models import Sequential, Model
 from keras.optimizers import Adam
-from keras.regularizers import l2
 
 
 def decomposable_model_generation(shape_utt, shape_path, settings):
@@ -142,8 +141,7 @@ class Ranker(object):
                              init='he_normal'))
         self.model.add(Activation('relu'))
         self.model.add(Dense(1, name='ranker', init='he_normal'))
-        self.model.add(keras.layers.LeakyReLU(alpha=0.3))
-
+        self.model.add(LeakyReLU(alpha=0.3))
 
     def __call__(self, compare_utter, compare_path):
         ranker = merge([compare_utter, compare_path], mode='concat')
