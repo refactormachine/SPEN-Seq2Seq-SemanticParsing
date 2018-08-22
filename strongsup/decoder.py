@@ -78,7 +78,7 @@ class Decoder(object):
         shape_utt = (self._utter_len, 100)
         shape_path = (self._max_stack_size, len(self.predicate_dictionary)) if \
             self._predicate_embedder_type == 'one_hot' else (self._max_stack_size, 96)
-        settings = {'lr': 0.1}
+        settings = {'lr': 0.0001}
         self._decomposable = decomposable_model_generation(shape_utt, shape_path, settings)
 
         if decomposable_weights_file and os.path.isfile(decomposable_weights_file):
@@ -377,7 +377,7 @@ class Decoder(object):
             utterances, decisions, y_hats, beam_scores = [], [], [], []
             curr_utterances, curr_decisions, curr_y_hats, curr_beam_scores = [], [], [], []
             lines_in_block = 0
-            BATCH_SIZE = 30
+            BATCH_SIZE = 1
             BLOCK_SIZE = 20
 
             for utterance, decision, y_hat, beam_score in csv_reader:
@@ -449,10 +449,16 @@ class Decoder(object):
         beam_batch[1] = np.array(beam_batch[1])
         y_hat_batch = np.array(y_hat_batch)
 
+        random_order = np.random.permutation(len(y_hat_batch))
+        y_hat_batch = y_hat_batch[random_order]
+        beam_batch[0] = beam_batch[0][random_order]
+        beam_batch[1] = beam_batch[1][random_order]
+
+
         loss, accuracy = self._decomposable.train_on_batch(beam_batch, y_hat_batch)
         # if i % 100 == 0:
         #     print 'loss: ' + str(loss) + ' accuracy: ' + str(accuracy)
-
+        predicts = self._decomposable.predict_on_batch(beam_batch)
         self._tb_logger.log('decomposableLoss', loss, step)
         self._tb_logger.log('decomposableAccuracy', accuracy, step)
 

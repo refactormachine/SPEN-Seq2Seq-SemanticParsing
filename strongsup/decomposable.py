@@ -141,7 +141,9 @@ class Ranker(object):
         self.model.add(Dense(hidden_len, name='hidden_rank', input_shape=(hidden_len * 2,),
                              init='he_normal'))
         self.model.add(Activation('relu'))
-        self.model.add(Dense(1, name='ranker', activation='softmax', init='he_normal'))
+        self.model.add(Dense(1, name='ranker', init='he_normal'))
+        self.model.add(keras.layers.LeakyReLU(alpha=0.3))
+
 
     def __call__(self, compare_utter, compare_path):
         ranker = merge([compare_utter, compare_path], mode='concat')
