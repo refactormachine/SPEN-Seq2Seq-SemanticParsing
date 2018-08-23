@@ -310,7 +310,7 @@ class Decoder(object):
         return decisions_embedder
 
     def train_decomposable_batches(self, beams, examples):
-        y_hat_batch, decisions, utterances, beam_scores = [], [], [], []
+        y_hats, decisions, utterances, beam_scores = [], [], [], []
 
         for example, beam in zip(examples, beams):
             if len(beam._paths) == 0:
@@ -326,6 +326,8 @@ class Decoder(object):
 
             for path in beam._paths:
                 check_denote = int(check_denotation(example.answer, path.finalized_denotation))
+                if not check_denote:
+                    check_denote = -1
                 # y_hat = [0, 0]
                 # y_hat[check_denote] = 1
                 curr_y_hat_batch.append(check_denote)
@@ -351,7 +353,7 @@ class Decoder(object):
             while len(curr_decisions) < BLOCK_SIZE:
                 curr_decisions.append(full_decision_for_print)
                 curr_utterances.append(sentence_for_print)
-                curr_y_hat_batch.append(0)
+                curr_y_hat_batch.append(-1)
                 curr_beam_scores.append(float('-inf'))
 
             # slice to size BLOCK_SIZE
@@ -363,20 +365,20 @@ class Decoder(object):
             # append to result vectors
             decisions.extend(curr_decisions)
             utterances.extend(curr_utterances)
-            y_hat_batch.extend(curr_y_hat_batch)
+            y_hats.extend(curr_y_hat_batch)
             beam_scores.extend(curr_beam_scores)
 
         decomposable_data = [[utter, dec, y, score]
-                             for utter, dec, y, score in zip(utterances, decisions, y_hat_batch, beam_scores)]
+                             for utter, dec, y, score in zip(utterances, decisions, y_hats, beam_scores)]
+        # self.train_decomposable(20, utterances, decisions, y_hats, beam_scores)
 
         return decomposable_data
 
     def train_decomposable_from_csv(self, csv_file):
-        self._train_step_count += 1
+        utterances, decisions, y_hats, beam_scores = [], [], [], []
 
         with open(csv_file, 'rt') as csvfile:
             csv_reader = csv.reader(csvfile, delimiter=',')
-            utterances, decisions, y_hats, beam_scores = [], [], [], []
             curr_utterances, curr_decisions, curr_y_hats, curr_beam_scores = [], [], [], []
             lines_in_block = 0
             BATCH_SIZE = 1
@@ -398,28 +400,30 @@ class Decoder(object):
                     curr_utterances, curr_decisions, curr_y_hats, curr_beam_scores = [], [], [], []
                     lines_in_block = 0
 
-            num_batches = len(decisions)
-            num_of_accurate_predictions = 0
-            iterations = verboserate(xrange(1000000), desc='Training decomposable model')
+        self.train_decomposable(BATCH_SIZE, utterances, decisions, y_hats, beam_scores)
 
-            for i in iterations:
-                batch_indices = random.sample(xrange(1, num_batches), BATCH_SIZE)
-                curr_utterances, curr_decisions, curr_y_hats, curr_beam_scores = [], [], [], []
+    def train_decomposable(self, BATCH_SIZE, utterances, decisions, y_hats, beam_scores):
+        num_batches = len(decisions)
+        num_of_accurate_predictions = 0
+        iterations = verboserate(xrange(1000000), desc='Training decomposable model')
+        for i in iterations:
+            batch_indices = random.sample(xrange(1, num_batches), BATCH_SIZE)
+            curr_utterances, curr_decisions, curr_y_hats, curr_beam_scores = [], [], [], []
 
-                for j in batch_indices:
-                    curr_utterances.extend(utterances[j])
-                    curr_decisions.extend(decisions[j])
-                    curr_y_hats.extend(y_hats[j])
-                    curr_beam_scores.extend(beam_scores[j])
-                    # TODO: TBD how to send these parameters
-                    num_of_accurate_predictions += \
-                        self.train_decomposable_on_example(curr_utterances, curr_decisions, curr_y_hats,
-                                                           curr_beam_scores, i)
+            for j in batch_indices:
+                curr_utterances.extend(utterances[j])
+                curr_decisions.extend(decisions[j])
+                curr_y_hats.extend(y_hats[j])
+                curr_beam_scores.extend(beam_scores[j])
+                # TODO: TBD how to send these parameters
+                num_of_accurate_predictions += \
+                    self.train_decomposable_on_example(curr_utterances, curr_decisions, curr_y_hats,
+                                                       curr_beam_scores, i)
 
-                if i % 1000 == 0:
-                    self._decomposable.save_weights(self._decomposable_weights_file)
-                    self._tb_logger.log('decomposableAccuracy', num_of_accurate_predictions, i)
-                    num_of_accurate_predictions = 0
+            if i % 1000 == 0:
+                self._decomposable.save_weights(self._decomposable_weights_file)
+                self._tb_logger.log('decomposableAccuracy', num_of_accurate_predictions, i)
+                num_of_accurate_predictions = 0
 
     def train_decomposable_on_example(self, utters, decisions, y_hats, beam_scores, step):
         if self._train_step_count < 0:
