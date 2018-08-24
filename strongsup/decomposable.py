@@ -11,37 +11,32 @@ from keras.optimizers import Adam
 from keras.regularizers import l2
 
 
-def decomposable_model_generation(max_len_utt, max_len_path, hidden_len, class_utt_batch_size,
-                                  settings):
+def decomposable_model_generation(utter_shape, path_shape,
+                                  hidden_len, classifications, settings):
     # todo: work on batch
-    utterance_inp = Input(shape=(max_len_utt,), dtype='float32', name='uttr_inp')
-    path_inp = Input(shape=(max_len_path,), dtype='float32', name='path_inp')
+    max_utters, utter_size = utter_shape
+    max_paths, path_size = path_shape
+    utterance_inp = Input(shape=(max_utters, utter_size), dtype='float32', name='uttr_inp')
+    path_inp = Input(shape=(max_paths, path_size), dtype='float32', name='path_inp')
 
     # Construct operations, which we'll chain together.
-    vectors = numpy.ndarray((100, 8), dtype='float32')
-    # todo: think of removing embedding layer
-    embed_utt = StaticEmbedding(vectors, max_len_utt, hidden_len, dropout=0.2, nr_tune=5000)
-    embed_path = StaticEmbedding(vectors, max_len_path, hidden_len, dropout=0.2, nr_tune=5000)
-    encode_utt = BiLSTM(max_len_utt, hidden_len, dropout=settings['dropout'])
-    encode_path = BiLSTM(max_len_path, hidden_len, dropout=settings['dropout'])
+    encode_utt = BiLSTM(max_utters, utter_size, hidden_len, dropout=settings['dropout'])
+    encode_path = BiLSTM(max_paths, path_size, hidden_len, dropout=settings['dropout'])
     attend = Attention(hidden_len, dropout=settings['dropout'])
     align = Alignment(hidden_len)
     compare = CompareAndAggregate(hidden_len, dropout=settings['dropout'])
-    output_score = Ranker(hidden_len, class_utt_batch_size, dropout=settings['dropout'])
+    output_score = Ranker(hidden_len, classifications, dropout=settings['dropout'])
 
-    utterance_embedded = embed_utt(utterance_inp)
-    path_embedded = embed_path(path_inp)
+    uttr_enc = encode_utt(utterance_inp)
+    path_enc = encode_path(path_inp)
 
-    uttr_enc = encode_utt(utterance_embedded)
-    path_enc = encode_path(path_embedded)
+    attention = attend(uttr_enc, path_enc, utter_size, path_size)
 
-    attention = attend(uttr_enc, path_enc, max_len_utt, max_len_path)
+    align_uttr = align(path_enc, attention, max_utters)
+    align_path = align(uttr_enc, attention, max_paths, transpose=True)
 
-    align_uttr = align(path_enc, attention, max_len_utt)
-    align_path = align(uttr_enc, attention, max_len_path, transpose=True)
-
-    compare_uttr = compare(uttr_enc, align_uttr, max_len_utt, True)
-    compare_path = compare(path_enc, align_path, max_len_path, False)
+    compare_uttr = compare(uttr_enc, align_uttr, utter_size, True)
+    compare_path = compare(path_enc, align_path, path_size, False)
 
     ranks = output_score(compare_uttr, compare_path)
 
@@ -55,57 +50,13 @@ def decomposable_model_generation(max_len_utt, max_len_path, hidden_len, class_u
     return decomposable_model
 
 
-class StaticEmbedding(object):
-    def __init__(self, vectors, max_length, nr_out, nr_tune=1000, dropout=0.0):
-        self.nr_out = nr_out
-        self.max_length = max_length
-        self.embed = Embedding(
-            vectors.shape[0],
-            vectors.shape[1],
-            input_length=max_length,
-            weights=[vectors],
-            name='embed_{}'.format(max_length),
-            trainable=False)
-        self.tune = Embedding(
-            nr_tune,
-            nr_out,
-            input_length=max_length,
-            weights=None,
-            name='tune_{}'.format(max_length),
-            trainable=True,
-            dropout=dropout)
-        self.mod_ids = Lambda(lambda sent: sent % (nr_tune - 1) + 1,
-                              output_shape=(self.max_length,))
-
-        self.project = TimeDistributed(
-            Dense(
-                nr_out,
-                activation=None,
-                bias=False,
-                name='project'))
-
-    def __call__(self, sentence):
-        def get_output_shape(shapes):
-            print(shapes)
-            return shapes[0]
-
-        mod_sent = self.mod_ids(sentence)
-        tuning = self.tune(mod_sent)
-        # tuning = merge([tuning, mod_sent],
-        #    mode=lambda AB: AB[0] * (K.clip(K.cast(AB[1], 'float32'), 0, 1)),
-        #    output_shape=(self.max_length, self.nr_out))
-        pretrained = self.project(self.embed(sentence))
-        vectors = merge([pretrained, tuning], mode='sum')
-        return vectors
-
-
 class BiLSTM(object):
-    def __init__(self, max_length, out_len, dropout=0.0):
+    def __init__(self, max_length, token_size, hidden_len, dropout=0.0):
         self.model = Sequential(name='BiLSTM_{}'.format(max_length))
-        self.model.add(Bidirectional(LSTM(out_len, return_sequences=True,
+        self.model.add(Bidirectional(LSTM(hidden_len, return_sequences=True,
                                      dropout_W=dropout, dropout_U=dropout),
-                                     input_shape=(max_length, out_len)))
-        self.model.add(TimeDistributed(Dense(out_len, activation='relu', init='he_normal')))
+                                     input_shape=(max_length, token_size)))
+        self.model.add(TimeDistributed(Dense(hidden_len, activation='relu', init='he_normal')))
         self.model.add(TimeDistributed(Dropout(0.2)))
 
     def __call__(self, sentence):

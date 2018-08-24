@@ -77,13 +77,18 @@ class Decoder(object):
         # shape_utt = (self._utter_len, 100)
         # shape_path = (self._max_stack_size, len(self.predicate_dictionary))
 
+        max_len_utter = 100
+
         hidden_layers_num = 300
         settings = {'lr': 0.1, 'dropout': 0.2}
         # todo: decide exactly which max utter/path lengths to send
         # self._decomposable = decomposable_model_generation(
         #     self._utter_len, self._max_stack_size, hidden_layers_num, 20, settings)
+        # classifications = 20
+        classifications = 2
         self._decomposable = decomposable_model_generation(
-            100, len(self.predicate_dictionary), hidden_layers_num, 20, settings)
+            (self._utter_len, max_len_utter), (self._max_stack_size, len(self.predicate_dictionary)),
+            hidden_layers_num, classifications, settings)
 
         if decomposable_weights_file and os.path.isfile(decomposable_weights_file):
             self._decomposable.load_weights(decomposable_weights_file)

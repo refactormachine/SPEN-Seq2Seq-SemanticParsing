@@ -330,7 +330,10 @@ class TensorBoardLogger(object):
     def __init__(self, log_dir):
         self.g = tf.Graph()
         self.summaries = {}
-        self.sess = tf.Session(graph=self.g)
+        self.sess = tf.Session(
+            graph=self.g,
+            config=tf.ConfigProto(log_device_placement=True, allow_soft_placement=True)
+        )
         self.summ_writer = tf.summary.FileWriter(log_dir, flush_secs=5)
 
     def log_proto(self, proto, step_num):
@@ -505,6 +508,9 @@ def gather_2d(tensor, i, j):
 def clean_session():
     """Create a new Graph, bind the graph to a new Session, and make that session the default."""
     graph = tf.Graph()  # create a fresh graph
-    with tf.Session(graph=graph) as sess:
+    with tf.Session(
+            graph=graph,
+            config=tf.ConfigProto(log_device_placement=True), allow_soft_placement=True
+    ) as sess:
         K.set_session(sess)  # bind Keras
         yield sess
