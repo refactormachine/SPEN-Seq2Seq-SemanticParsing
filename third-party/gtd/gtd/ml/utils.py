@@ -332,7 +332,6 @@ class TensorBoardLogger(object):
         self.summaries = {}
         self.sess = tf.Session(
             graph=self.g,
-            config=tf.ConfigProto(log_device_placement=True, allow_soft_placement=True)
         )
         self.summ_writer = tf.summary.FileWriter(log_dir, flush_secs=5)
 
@@ -510,7 +509,6 @@ def clean_session():
     graph = tf.Graph()  # create a fresh graph
     with tf.Session(
             graph=graph,
-            config=tf.ConfigProto(log_device_placement=True), allow_soft_placement=True
     ) as sess:
         K.set_session(sess)  # bind Keras
         yield sess

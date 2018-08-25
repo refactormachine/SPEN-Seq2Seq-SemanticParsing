@@ -44,7 +44,7 @@ def decomposable_model_generation(utter_shape, path_shape,
 
     decomposable_model.compile(
         optimizer=Adam(lr=settings['lr']),
-        loss='binary_crossentropy',
+        loss='categorical_crossentropy',
         metrics=['accuracy'])
 
     return decomposable_model

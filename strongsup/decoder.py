@@ -84,8 +84,7 @@ class Decoder(object):
         # todo: decide exactly which max utter/path lengths to send
         # self._decomposable = decomposable_model_generation(
         #     self._utter_len, self._max_stack_size, hidden_layers_num, 20, settings)
-        # classifications = 20
-        classifications = 2
+        classifications = 20
         self._decomposable = decomposable_model_generation(
             (self._utter_len, max_len_utter), (self._max_stack_size, len(self.predicate_dictionary)),
             hidden_layers_num, classifications, settings)
@@ -448,23 +447,25 @@ class Decoder(object):
                     np.full((self._utter_len - len(utter_embds), 100), 0.)
                 ))
 
-                # y_hat_vec = [0, 0]
-                # y_hat_vec[y_hat] = 1
                 decisions_embedder = self.decisions_embedder(decision_tokens)
-                decisions_embedder = np.multiply(decisions_embedder, float(beam_score))
+                # decisions_embedder = np.multiply(decisions_embedder, float(beam_score))
 
                 beam_batch[0].append(utter_embds)
                 beam_batch[1].append(decisions_embedder)
-                # y_hat_batch.append(y_hat_vec)
                 y_hat_batch.append(y_hat)
         beam_batch[0] = np.array(beam_batch[0])
         beam_batch[1] = np.array(beam_batch[1])
-        y_hat_batch = np.array(y_hat_batch)
 
-        beam_batch = [beam_batch[0][0, ::], beam_batch[1][0, ::]]
+        # beam_batch = [beam_batch[0][0, ::], beam_batch[1][0, ::]]  # slice out the first dim (20)
+
+        y_hat_categorical = []
+        for i in range(len(y_hat_batch)):
+            ys = np.zeros(len(y_hat_batch))
+            ys[i] = y_hat_batch[i]
+            y_hat_categorical += [ys]
+
+        y_hat_batch = np.array(y_hat_categorical)
         loss, accuracy = self._decomposable.train_on_batch(beam_batch, y_hat_batch)
-        # if i % 100 == 0:
-        #     print 'loss: ' + str(loss) + ' accuracy: ' + str(accuracy)
         predict = self._decomposable.predict_on_batch(beam_batch)
 
         self._tb_logger.log('decomposableLoss', loss, step)
