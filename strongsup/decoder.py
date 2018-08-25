@@ -451,7 +451,7 @@ class Decoder(object):
                 # y_hat_vec = [0, 0]
                 # y_hat_vec[y_hat] = 1
                 decisions_embedder = self.decisions_embedder(decision_tokens)
-                decisions_embedder = np.multiply(decisions_embedder, float(beam_score))
+                #decisions_embedder = np.multiply(decisions_embedder, float(beam_score))
 
                 beam_batch[0].append(utter_embds)
                 beam_batch[1].append(decisions_embedder)
@@ -461,12 +461,21 @@ class Decoder(object):
         beam_batch[1] = np.array(beam_batch[1])
         y_hat_batch = np.array(y_hat_batch)
 
-        beam_batch = [beam_batch[0][0, ::], beam_batch[1][0, ::]]
-        loss, accuracy = self._decomposable.train_on_batch(beam_batch, y_hat_batch)
-        # if i % 100 == 0:
-        #     print 'loss: ' + str(loss) + ' accuracy: ' + str(accuracy)
-        predict = self._decomposable.predict_on_batch(beam_batch)
 
-        self._tb_logger.log('decomposableLoss', loss, step)
-        self._tb_logger.log('decomposableAccuracy', accuracy, step)
+        random_order = np.random.permutation(len(y_hat_batch))
+        y_hat_batch = y_hat_batch[random_order]
+        beam_batch[0] = beam_batch[0][random_order]
+        beam_batch[1] = beam_batch[1][random_order]
+
+        for i in xrange(10000):
+            beam_batch = [beam_batch[0][0, ::], beam_batch[1][0, ::]]
+            loss, accuracy = self._decomposable.train_on_batch(beam_batch, y_hat_batch)
+            if i % 100 == 0:
+                print 'loss: ' + str(loss) + ' accuracy: ' + str(accuracy)
+            predict = self._decomposable.predict_on_batch(beam_batch)
+
+            self._tb_logger.log('decomposableLoss', loss, step)
+            self._tb_logger.log('decomposableAccuracy', accuracy, step)
+
+        exit()
 
