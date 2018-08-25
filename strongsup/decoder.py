@@ -80,7 +80,7 @@ class Decoder(object):
         max_len_utter = 100
 
         hidden_layers_num = 300
-        settings = {'lr': 0.1, 'dropout': 0.2}
+        settings = {'lr': 0.001, 'dropout': 0.2}
         # todo: decide exactly which max utter/path lengths to send
         # self._decomposable = decomposable_model_generation(
         #     self._utter_len, self._max_stack_size, hidden_layers_num, 20, settings)
@@ -352,20 +352,20 @@ class Decoder(object):
             if not beam_batch_correct:
                 continue
 
-            BLOCK_SIZE = 20
-
-            # pad to size BLOCK_SIZE
-            while len(curr_decisions) < BLOCK_SIZE:
-                curr_decisions.append(full_decision_for_print)
-                curr_utterances.append(sentence_for_print)
-                curr_y_hat_batch.append(0)
-                curr_beam_scores.append(float('-inf'))
+            # BLOCK_SIZE = 20
+            #
+            # # pad to size BLOCK_SIZE
+            # while len(curr_decisions) < BLOCK_SIZE:
+            #     curr_decisions.append(full_decision_for_print)
+            #     curr_utterances.append(sentence_for_print)
+            #     curr_y_hat_batch.append(0)
+            #     curr_beam_scores.append(float('-inf'))
 
             # slice to size BLOCK_SIZE
-            curr_decisions = curr_decisions[:BLOCK_SIZE]
-            curr_utterances = curr_utterances[:BLOCK_SIZE]
-            curr_y_hat_batch = curr_y_hat_batch[:BLOCK_SIZE]
-            curr_beam_scores = curr_beam_scores[:BLOCK_SIZE]
+            # curr_decisions = curr_decisions[:BLOCK_SIZE]
+            # curr_utterances = curr_utterances[:BLOCK_SIZE]
+            # curr_y_hat_batch = curr_y_hat_batch[:BLOCK_SIZE]
+            # curr_beam_scores = curr_beam_scores[:BLOCK_SIZE]
 
             # append to result vectors
             decisions.extend(curr_decisions)
@@ -428,14 +428,14 @@ class Decoder(object):
             if i % 1000 == 0:
                 self._decomposable.save_weights(self._decomposable_weights_file)
 
-    def train_decomposable_on_example(self, utters_batch, decisions_batch, y_hats_batch,
+    def train_decomposable_on_example(self, utters_batch, decisions_batch, y_golds_batch,
                                       beam_scores_batch, step):
         beam_batch = [[], []]
-        y_hat_batch = []
+        y_gold_batch = []
 
-        for decisions, utters, y_hats, beam_scores in zip(decisions_batch, utters_batch,
-                                                          y_hats_batch, beam_scores_batch):
-            for decision, utter, y_hat, beam_score in zip(decisions, utters, y_hats, beam_scores):
+        for decisions, utters, y_golds, beam_scores in zip(decisions_batch, utters_batch,
+                                                          y_golds_batch, beam_scores_batch):
+            for decision, utter, y_gold, beam_score in zip(decisions, utters, y_golds, beam_scores):
                 decision_tokens = decision.split()
 
                 utter_embds = []
@@ -448,34 +448,39 @@ class Decoder(object):
                     np.full((self._utter_len - len(utter_embds), 100), 0.)
                 ))
 
-                # y_hat_vec = [0, 0]
-                # y_hat_vec[y_hat] = 1
+                y_gold_vec = [0, 0]
+                y_gold_vec[y_gold] = 1
                 decisions_embedder = self.decisions_embedder(decision_tokens)
                 #decisions_embedder = np.multiply(decisions_embedder, float(beam_score))
 
                 beam_batch[0].append(utter_embds)
                 beam_batch[1].append(decisions_embedder)
-                # y_hat_batch.append(y_hat_vec)
-                y_hat_batch.append(y_hat)
+                y_gold_batch.append(y_gold_vec)
+                # y_gold_batch.append(y_hat)
         beam_batch[0] = np.array(beam_batch[0])
         beam_batch[1] = np.array(beam_batch[1])
-        y_hat_batch = np.array(y_hat_batch)
+        y_gold_batch = np.array(y_gold_batch)
 
 
-        random_order = np.random.permutation(len(y_hat_batch))
-        y_hat_batch = y_hat_batch[random_order]
+        random_order = np.random.permutation(len(y_gold_batch))
+        y_gold_batch = y_gold_batch[random_order]
         beam_batch[0] = beam_batch[0][random_order]
         beam_batch[1] = beam_batch[1][random_order]
 
-        for i in xrange(10000):
-            beam_batch = [beam_batch[0][0, ::], beam_batch[1][0, ::]]
-            loss, accuracy = self._decomposable.train_on_batch(beam_batch, y_hat_batch)
+        for i in xrange(1000):
+            #beam_batch = [beam_batch[0][0, ::], beam_batch[1][0, ::]]
+            loss, accuracy = self._decomposable.train_on_batch(beam_batch, y_gold_batch)
             if i % 100 == 0:
-                print 'loss: ' + str(loss) + ' accuracy: ' + str(accuracy)
-            predict = self._decomposable.predict_on_batch(beam_batch)
+                predict = self._decomposable.predict_on_batch(beam_batch)
+                # print 'predict shape: ' + predict.shape()
+                for j in xrange(predict.shape[0]):
+                    print str(j) + ' golden: ' + str(y_gold_batch[j][1]) + ' predict ' + str(predict[j][1] >= predict[j][0])
+                    for k in xrange(predict.shape[1]):
+                        print predict[j][k]
+                print 'i: ' + str(i) + 'loss: ' + str(loss) + ' accuracy: ' + str(accuracy)
 
             self._tb_logger.log('decomposableLoss', loss, step)
             self._tb_logger.log('decomposableAccuracy', accuracy, step)
-
+        print "finished"
         exit()
 
