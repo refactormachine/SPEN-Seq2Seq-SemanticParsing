@@ -388,13 +388,17 @@ class Decoder(object):
             # BATCH_SIZE = 30
             BATCH_SIZE = 1
             BLOCK_SIZE = 20
-
+            last_utterance = ''
+            last_decision = ''
             for utterance, decision, y_hat, beam_score in csv_reader:
-                curr_utterances.append(utterance)
-                curr_decisions.append(decision)
-                curr_y_hats.append(int(y_hat))
-                curr_beam_scores.append(beam_score)
+                if last_utterance != utterance or last_decision != decision:
+                    curr_utterances.append(utterance)
+                    curr_decisions.append(decision)
+                    curr_y_hats.append(int(y_hat))
+                    curr_beam_scores.append(beam_score)
                 lines_in_block += 1
+                last_utterance = utterance
+                last_decision = decision
 
                 if lines_in_block == BLOCK_SIZE:
                     utterances.append(curr_utterances)
@@ -412,10 +416,11 @@ class Decoder(object):
             curr_utterances, curr_decisions, curr_y_hats, curr_beam_scores = [], [], [], []
 
             for j in batch_indices:
-                curr_utterances.append(utterances[j])
-                curr_decisions.append(decisions[j])
-                curr_y_hats.append(y_hats[j])
-                curr_beam_scores.append(beam_scores[j])
+                if utterances[j] != utterances[j-1]:
+                    curr_utterances.append(utterances[j])
+                    curr_decisions.append(decisions[j])
+                    curr_y_hats.append(y_hats[j])
+                    curr_beam_scores.append(beam_scores[j])
 
             # TODO: TBD how to send these parameters
             self.train_decomposable_on_example(
@@ -426,6 +431,8 @@ class Decoder(object):
                 i)
 
             if i % 1000 == 0:
+                name = str(1) + os.path.basename(self._decomposable_weights_file)
+                self._decomposable.save_weights(os.path.join(os.path.dirname(self._decomposable_weights_file), name))
                 self._decomposable.save_weights(self._decomposable_weights_file)
 
     def train_decomposable_on_example(self, utters_batch, decisions_batch, y_golds_batch,
@@ -467,20 +474,20 @@ class Decoder(object):
         beam_batch[0] = beam_batch[0][random_order]
         beam_batch[1] = beam_batch[1][random_order]
 
-        for i in xrange(1000):
+        #for i in xrange(1000):
             #beam_batch = [beam_batch[0][0, ::], beam_batch[1][0, ::]]
-            loss, accuracy = self._decomposable.train_on_batch(beam_batch, y_gold_batch)
-            if i % 100 == 0:
-                predict = self._decomposable.predict_on_batch(beam_batch)
-                # print 'predict shape: ' + predict.shape()
-                for j in xrange(predict.shape[0]):
-                    print str(j) + ' golden: ' + str(y_gold_batch[j][1]) + ' predict ' + str(predict[j][1] >= predict[j][0])
-                    for k in xrange(predict.shape[1]):
-                        print predict[j][k]
-                print 'i: ' + str(i) + 'loss: ' + str(loss) + ' accuracy: ' + str(accuracy)
+        loss, accuracy = self._decomposable.train_on_batch(beam_batch, y_gold_batch)
+        if step % 100 == 0:
+            predict = self._decomposable.predict_on_batch(beam_batch)
+            # print 'predict shape: ' + predict.shape()
+            for j in xrange(predict.shape[0]):
+                print str(j) + ' golden: ' + str(y_gold_batch[j][1]) + ' predict ' + str(predict[j][1] >= predict[j][0])
+                for k in xrange(predict.shape[1]):
+                    print predict[j][k]
+            print 'step: ' + str(step) + 'loss: ' + str(loss) + ' accuracy: ' + str(accuracy)
 
-            self._tb_logger.log('decomposableLoss', loss, step)
-            self._tb_logger.log('decomposableAccuracy', accuracy, step)
-        print "finished"
-        exit()
+        self._tb_logger.log('decomposableLoss', loss, step)
+        self._tb_logger.log('decomposableAccuracy', accuracy, step)
+        # print "finished"
+        # exit()
 
