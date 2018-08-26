@@ -74,23 +74,16 @@ class Decoder(object):
         self._predicate2index = self._build_predicate_dictionary(predicates)
 
         # 100 is the glove embedding length per word
-        # shape_utt = (self._utter_len, 100)
-        # shape_path = (self._max_stack_size, len(self.predicate_dictionary))
-
         max_len_utter = 100
-
-        hidden_layers_num = 300
+        hidden_layers_num = 15
         settings = {'lr': 0.1, 'dropout': 0.2}
-        # todo: decide exactly which max utter/path lengths to send
-        # self._decomposable = decomposable_model_generation(
-        #     self._utter_len, self._max_stack_size, hidden_layers_num, 20, settings)
         classifications = 20
         self._decomposable = decomposable_model_generation(
             (self._utter_len, max_len_utter), (self._max_stack_size, len(self.predicate_dictionary)),
             hidden_layers_num, classifications, settings)
 
-        if decomposable_weights_file and os.path.isfile(decomposable_weights_file):
-            self._decomposable.load_weights(decomposable_weights_file)
+        # if decomposable_weights_file and os.path.isfile(decomposable_weights_file):
+        #     self._decomposable.load_weights(decomposable_weights_file)
 
         # Exploration policy
         # TODO: Resolve this circular import differently
@@ -332,8 +325,6 @@ class Decoder(object):
 
             for path in beam._paths:
                 check_denote = int(check_denotation(example.answer, path.finalized_denotation))
-                # y_hat = [0, 0]
-                # y_hat[check_denote] = 1
                 curr_y_hat_batch.append(check_denote)
                 full_decision_for_print = ''
 
@@ -378,20 +369,18 @@ class Decoder(object):
         return decomposable_data
 
     def train_decomposable_from_csv(self, csv_file):
+        BLOCK_SIZE = 32
         utterances, decisions, y_hats, beam_scores = [], [], [], []
 
         with open(csv_file, 'rt') as csvfile:
             csv_reader = csv.reader(csvfile, delimiter=',')
             curr_utterances, curr_decisions, curr_y_hats, curr_beam_scores = [], [], [], []
             lines_in_block = 0
-            # BATCH_SIZE = 30
-            BATCH_SIZE = 1
-            BLOCK_SIZE = 20
 
             for utterance, decision, y_hat, beam_score in csv_reader:
                 curr_utterances.append(utterance)
                 curr_decisions.append(decision)
-                curr_y_hats.append(int(y_hat))
+                curr_y_hats.append(y_hat)
                 curr_beam_scores.append(beam_score)
                 lines_in_block += 1
 
@@ -406,68 +395,70 @@ class Decoder(object):
 
         num_batches = len(decisions)
 
-        for i in xrange(10000):
-            batch_indices = random.sample(xrange(1, num_batches), BATCH_SIZE)
-            curr_utterances, curr_decisions, curr_y_hats, curr_beam_scores = [], [], [], []
+        for step in xrange(10000):
+            # sample a batch
+            batch_indices = random.sample(xrange(1, num_batches), 1)[0]
 
-            for j in batch_indices:
-                curr_utterances.append(utterances[j])
-                curr_decisions.append(decisions[j])
-                curr_y_hats.append(y_hats[j])
-                curr_beam_scores.append(beam_scores[j])
+            curr_utterances = np.array(utterances[batch_indices])
+            curr_decisions = np.array(decisions[batch_indices])
+            curr_y_hats = np.array(y_hats[batch_indices])
+            curr_beam_scores = np.array(beam_scores[batch_indices])
 
-            # TODO: TBD how to send these parameters
+            # randomize batch
+            randomize = np.arange(BLOCK_SIZE)
+            np.random.shuffle(randomize)
+            curr_utterances = curr_utterances[randomize]
+            curr_decisions = curr_decisions[randomize]
+            curr_y_hats = curr_y_hats[randomize]
+            curr_beam_scores = curr_beam_scores[randomize]
+
             self.train_decomposable_on_example(
                 curr_utterances,
                 curr_decisions,
                 curr_y_hats,
                 curr_beam_scores,
-                i)
+                step)
 
-            if i % 1000 == 0:
-                self._decomposable.save_weights(self._decomposable_weights_file)
+            if step % 100000 == 0:
+                self._decomposable.save_weights(self._decomposable_weights_file.format(step))
 
     def train_decomposable_on_example(self, utters_batch, decisions_batch, y_hats_batch,
                                       beam_scores_batch, step):
         beam_batch = [[], []]
+        beam_score_batch = []
         y_hat_batch = []
 
-        for decisions, utters, y_hats, beam_scores in zip(decisions_batch, utters_batch,
-                                                          y_hats_batch, beam_scores_batch):
-            for decision, utter, y_hat, beam_score in zip(decisions, utters, y_hats, beam_scores):
-                decision_tokens = decision.split()
+        for decision, utter, beam_score in zip(decisions_batch, utters_batch, beam_scores_batch):
+            decision_tokens = decision.split()
 
-                utter_embds = []
-                for token in utter.split():
-                    utter_embds += [self._glove_embeddings[token]]
+            utter_embds = []
+            for token in utter.split():
+                utter_embds += [self._glove_embeddings[token]]
 
-                utter_embds = np.array(utter_embds)
-                utter_embds = np.concatenate((
-                    utter_embds,
-                    np.full((self._utter_len - len(utter_embds), 100), 0.)
-                ))
+            utter_embds = np.array(utter_embds)
+            utter_embds = np.concatenate((
+                utter_embds,
+                np.full((self._utter_len - len(utter_embds), 100), 0.)
+            ))
 
-                decisions_embedder = self.decisions_embedder(decision_tokens)
-                # decisions_embedder = np.multiply(decisions_embedder, float(beam_score))
+            decisions_embedder = self.decisions_embedder(decision_tokens)
 
-                beam_batch[0].append(utter_embds)
-                beam_batch[1].append(decisions_embedder)
-                y_hat_batch.append(y_hat)
+            beam_batch[0].append(utter_embds)
+            beam_batch[1].append(decisions_embedder)
+            beam_score_batch.append(beam_score)
+            y_hat_batch.append(beam_score)
         beam_batch[0] = np.array(beam_batch[0])
         beam_batch[1] = np.array(beam_batch[1])
+        beam_score_batch = np.array(beam_score_batch)
+        y_hat_batch = np.array(y_hat_batch)
 
-        # beam_batch = [beam_batch[0][0, ::], beam_batch[1][0, ::]]  # slice out the first dim (20)
-
-        y_hat_categorical = []
-        for i in range(len(y_hat_batch)):
-            ys = np.zeros(len(y_hat_batch))
-            ys[i] = y_hat_batch[i]
-            y_hat_categorical += [ys]
-
-        y_hat_batch = np.array(y_hat_categorical)
+        # loss, accuracy = self._decomposable.train_on_batch(beam_batch, beam_score_batch)
         loss, accuracy = self._decomposable.train_on_batch(beam_batch, y_hat_batch)
         predict = self._decomposable.predict_on_batch(beam_batch)
 
         self._tb_logger.log('decomposableLoss', loss, step)
         self._tb_logger.log('decomposableAccuracy', accuracy, step)
+
+        if step % 100000 == 0:
+            print 'decomposablePrediction: {} at step {}'.format(str(predict.flatten()), step)
 

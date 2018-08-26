@@ -44,10 +44,17 @@ def decomposable_model_generation(utter_shape, path_shape,
 
     decomposable_model.compile(
         optimizer=Adam(lr=settings['lr']),
-        loss='categorical_crossentropy',
+        loss=smooth_l1,
         metrics=['accuracy'])
 
     return decomposable_model
+
+
+def smooth_l1(y_true, y_pred):
+    HUBER_DELTA = 0.5
+    x = K.abs(y_true - y_pred)
+    x = K.tf.where(x < HUBER_DELTA, 0.5 * x ** 2, HUBER_DELTA * (x - 0.5 * HUBER_DELTA))
+    return K.sum(x)
 
 
 class BiLSTM(object):
@@ -171,7 +178,7 @@ class Ranker(object):
         self.model.add(Dense(hidden_len, name='entail2',
                              init='he_normal', W_regularizer=l2(L2)))
         self.model.add(Activation('relu'))
-        self.model.add(Dense(out_len, name='entail_out', activation='softmax',
+        self.model.add(Dense(1, name='entail_out', activation='relu',
                              W_regularizer=l2(L2), init='zero'))
 
     def __call__(self, compare_utter, compare_path):

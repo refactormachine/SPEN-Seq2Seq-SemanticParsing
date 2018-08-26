@@ -24,7 +24,7 @@ utterance_length = config.parse_model.utterance_embedder.utterance_length
 utterance_num = config.parse_model.utterance_embedder.utterance_num
 iterations_per_utterance = config.decoder.train_exploration_policy.iterations_per_utterance
 tb_logger = TensorBoardLogger(os.path.join(os.getcwd(), 'data', 'decomposable', 'tensorboard'))
-decomposable_weights_file = os.path.join(os.getcwd(), 'data', 'decomposable', 'decomposable_weights.hdf5')
+decomposable_weights_file = os.path.join(os.getcwd(), 'data', 'decomposable', 'decomposable_weights_{}.hdf5')
 
 decoder = Decoder(None, config.decoder, domain, glove_embeddings, domain.fixed_predicates,
                   utterance_length * utterance_num,
