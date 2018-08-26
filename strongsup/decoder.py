@@ -397,7 +397,7 @@ class Decoder(object):
         num_batches = len(decisions)
         iterations = verboserate(xrange(1000000), desc='Training decomposable model')
 
-        for iterations in xrange(1000000):
+        for step in iterations:
             # sample a batch
             batch_indices = random.sample(xrange(1, num_batches), 1)[0]
 
