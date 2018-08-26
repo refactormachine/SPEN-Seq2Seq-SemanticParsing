@@ -6,6 +6,7 @@ from collections import namedtuple
 import numpy as np
 import tensorflow as tf
 from gtd.utils import flatten
+from gtd.chrono import verboserate
 
 from strongsup.case_weighter import get_case_weighter
 from strongsup.decomposable import decomposable_model_generation
@@ -394,8 +395,9 @@ class Decoder(object):
                     lines_in_block = 0
 
         num_batches = len(decisions)
+        iterations = verboserate(xrange(1000000), desc='Training decomposable model')
 
-        for step in xrange(10000):
+        for iterations in xrange(1000000):
             # sample a batch
             batch_indices = random.sample(xrange(1, num_batches), 1)[0]
 
