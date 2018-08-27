@@ -480,7 +480,7 @@ class Decoder(object):
         self._tb_logger.log('decomposableLoss', loss, step)
         self._tb_logger.log('decomposableAccuracy', accuracy, step)
 
-        if step % 100 == 0:
+        if step % 100000 == 0:
             print 'decomposablePrediction: {} at step {}'.format(str(predict.flatten()), step)
             print 'Loss: {} Accuracy before: {} Accuracy after: {}\n'.format(
                 loss, accuracy, accuracy_after)
