@@ -401,6 +401,8 @@ class Decoder(object):
                 last_decision = decision
 
                 if lines_in_block == BLOCK_SIZE:
+                    if len(curr_utterances) == 0:
+                        bla = 5
                     utterances.append(curr_utterances)
                     decisions.append(curr_decisions)
                     y_hats.append(curr_y_hats)
@@ -416,11 +418,10 @@ class Decoder(object):
             curr_utterances, curr_decisions, curr_y_hats, curr_beam_scores = [], [], [], []
 
             for j in batch_indices:
-                if utterances[j] != utterances[j-1]:
-                    curr_utterances.append(utterances[j])
-                    curr_decisions.append(decisions[j])
-                    curr_y_hats.append(y_hats[j])
-                    curr_beam_scores.append(beam_scores[j])
+                curr_utterances.append(utterances[j])
+                curr_decisions.append(decisions[j])
+                curr_y_hats.append(y_hats[j])
+                curr_beam_scores.append(beam_scores[j])
 
             # TODO: TBD how to send these parameters
             self.train_decomposable_on_example(
