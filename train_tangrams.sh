@@ -3,7 +3,7 @@
 
 BASE_DIR=$(cd $(dirname $0);pwd -P)
 export MKL_THREADING_LAYER="GNU"
-export LD_LIBRARY_PATH="/usr/local/lib/cuda-9.0/lib64/:/usr/local/lib/cudnn-9.0-v7/lib64/"
+export LD_LIBRARY_PATH="/usr/local/lib/cuda-9.1.85/lib64/:/usr/local/lib/cudnn-8.0-v7/lib64/"
 export STRONGSUP_DIR=${BASE_DIR}/data
 
 echo "=================== Start running script ==================="
