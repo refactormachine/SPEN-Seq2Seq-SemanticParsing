@@ -363,6 +363,8 @@ class Decoder(object):
             prev_utterance = None
 
             for utterance, decision, y_hat, beam_score in csv_reader:
+                y_hat, beam_score = float(y_hat), float(beam_score)
+
                 if not prev_utterance:
                     prev_utterance = utterance
 
