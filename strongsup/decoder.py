@@ -1,4 +1,5 @@
 import csv
+import itertools
 import os
 import random
 from collections import namedtuple
@@ -457,14 +458,13 @@ class Decoder(object):
             to_categorical(y_hat_batch))
         # prediction = self._decomposable.predict_on_batch([train_utters_batch, train_decisions_batch])
 
-        reranked_predictions, learning_to_rank = \
-            self.pairwise_approach(train_utters_batch, train_decisions_batch, y_hat_batch)
+        learning_to_rank = self.pairwise_approach(train_utters_batch, train_decisions_batch, y_hat_batch)
 
         self._tb_logger.log('decomposableLoss', loss, step)
         self._tb_logger.log('decomposableAccuracy', accuracy, step)
         self._tb_logger.log('decomposableRanker', learning_to_rank, step)
 
-        if step % 1000 == 0:
+        if step % 25000 == 0:
             print '\nRanking index: {} at step {}'.format(learning_to_rank, step)
             print 'Loss: {} Accuracy before: {} '.format(loss, accuracy)
 
@@ -516,29 +516,21 @@ class Decoder(object):
         false_predictions = [(pred, dec) for (pred, dec, y) in zip(utterances, decisions, y_hats) if not y]
         total_pairs = 0
         px_gt_py = 0
-        reranked_predictions, reranked_y_hats = [], []
 
-        for true_pred_utter, true_pred_dec in true_predictions:
-            for false_pred_utter, false_pred_dec in false_predictions:
-                train_params = [np.array([false_pred_utter, true_pred_utter]),
-                                np.array([false_pred_dec, true_pred_dec])]
-                prediction = self._decomposable.predict_on_batch(train_params)
-                total_pairs += 1
+        for (false_pred_utter, false_pred_dec), (true_pred_utter, true_pred_dec) \
+                in itertools.product(false_predictions, true_predictions):
+            train_params = [np.array([false_pred_utter, true_pred_utter]),
+                            np.array([false_pred_dec, true_pred_dec])]
+            prediction = self._decomposable.predict_on_batch(train_params)
+            total_pairs += 1
 
-                # rank the two examples
-                prob_false = prediction[0][1]  # prob that false example is true - should be low
-                prob_true = prediction[1][1]  # prob that true example is true - should be high
+            # rank the two examples
+            prob_false = prediction[0][1]  # prob that false example is true - should be low
+            prob_true = prediction[1][1]  # prob that true example is true - should be high
 
-                # don't care about the actual class of the prediction
-                # only care about the relative order of the probabilities
-                if prob_false < prob_true:  # the true must be 'truer' than the false
-                    px_gt_py += 1  # prediction is correct
-                    # rank according to prediction
-                    reranked_predictions.insert(0, prediction)
-                    reranked_y_hats.insert(0, 1)
-                else:
-                    # rank according to prediction
-                    reranked_predictions.append(prediction)
-                    reranked_y_hats.append(0)
+            # don't care about the actual class of the prediction
+            # only care about the relative order of the probabilities
+            if prob_false < prob_true:  # the true must be 'truer' than the false
+                px_gt_py += 1  # prediction is correct
 
-        return [np.array(reranked_predictions), np.array(reranked_predictions)], float(px_gt_py) / total_pairs
+        return float(px_gt_py) / total_pairs
