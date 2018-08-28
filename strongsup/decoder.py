@@ -7,6 +7,7 @@ import numpy as np
 import tensorflow as tf
 from gtd.utils import flatten
 from gtd.chrono import verboserate
+from keras.utils.np_utils import to_categorical
 
 from strongsup.case_weighter import get_case_weighter
 from strongsup.decomposable import decomposable_model_generation
@@ -77,8 +78,8 @@ class Decoder(object):
         # 100 is the glove embedding length per word
         max_len_utter = 100
         hidden_layers_num = 15
-        settings = {'lr': 0.0001, 'dropout': 0.2}
-        classifications = 20
+        settings = {'lr': 0.0001, 'dropout': 0.05}
+        classifications = 2
         self._decomposable = decomposable_model_generation(
             (self._utter_len, max_len_utter), (self._max_stack_size, len(self.predicate_dictionary)),
             hidden_layers_num, classifications, settings)
@@ -444,7 +445,32 @@ class Decoder(object):
 
     def train_decomposable_on_example(self, utters_batch, decisions_batch, y_hats_batch,
                                       beam_scores_batch, step):
-        beam_batch = [[], []]
+        train_decisions_batch, train_utters_batch, y_hat_batch = \
+            self.get_trainable_batches(utters_batch,
+                                       decisions_batch,
+                                       y_hats_batch,
+                                       beam_scores_batch)
+
+        # loss, accuracy = self._decomposable.train_on_batch(beam_batch, beam_score_batch)
+        loss, accuracy = self._decomposable.train_on_batch(
+            [train_utters_batch, train_decisions_batch],
+            to_categorical(y_hat_batch))
+        # prediction = self._decomposable.predict_on_batch([train_utters_batch, train_decisions_batch])
+
+        reranked_predictions, learning_to_rank = \
+            self.pairwise_approach(train_utters_batch, train_decisions_batch, y_hat_batch)
+
+        self._tb_logger.log('decomposableLoss', loss, step)
+        self._tb_logger.log('decomposableAccuracy', accuracy, step)
+        self._tb_logger.log('decomposableRanker', learning_to_rank, step)
+
+        if step % 1000 == 0:
+            print '\nRanking index: {} at step {}'.format(learning_to_rank, step)
+            print 'Loss: {} Accuracy before: {} '.format(loss, accuracy)
+
+    def get_trainable_batches(self, utters_batch, decisions_batch, y_hats_batch, beam_scores_batch):
+        train_utters_batch = []
+        train_decisions_batch = []
         beam_score_batch = []
         y_hat_batch = []
 
@@ -463,25 +489,56 @@ class Decoder(object):
 
             decisions_embedder = self.decisions_embedder(decision_tokens)
 
-            beam_batch[0].append(utter_embds)
-            beam_batch[1].append(decisions_embedder)
+            train_utters_batch.append(utter_embds)
+            train_decisions_batch.append(decisions_embedder)
             beam_score_batch.append(beam_score)
             y_hat_batch.append(y_hat)
-        beam_batch[0] = np.array(beam_batch[0])
-        beam_batch[1] = np.array(beam_batch[1])
+        train_utters_batch = np.array(train_utters_batch)
+        train_decisions_batch = np.array(train_decisions_batch)
         beam_score_batch = np.array(beam_score_batch)
         y_hat_batch = np.array(y_hat_batch)
 
-        # loss, accuracy = self._decomposable.train_on_batch(beam_batch, beam_score_batch)
-        loss, accuracy = self._decomposable.train_on_batch(beam_batch, y_hat_batch)
-        predict = self._decomposable.predict_on_batch(beam_batch)
-        accuracy_after = np.sum(np.where(predict > 0))
+        return train_decisions_batch, train_utters_batch, y_hat_batch
 
-        self._tb_logger.log('decomposableLoss', loss, step)
-        self._tb_logger.log('decomposableAccuracy', accuracy, step)
+    def pairwise_approach(self, utterances, decisions, y_hats):
+        """
+        Rerank a batch and calculate index of how good the reranker is.
+        The index implements the pairwise approach to ranking.
+        The goal for the ranker is to minimize the number of inversions in ranking,
+        i.e. cases where the pair of results are in the wrong order relative to the ground truth.
+        :param utterances: ndarray of shape (BATCH_SIZE, 2) of utterances (e.g. BATCH_SIZE=32)
+        :param decisions: ndarray of shape (BATCH_SIZE, 2) of decisions (e.g. BATCH_SIZE=32)
+        :param y_hats: ndarray of shape (BATCH_SIZE, 2) of ground truth labels to predictions (e.g. BATCH_SIZE=32)
+        :return: A list of (utterances, decisions) and accuracy.
+        The list's order assures that the True predictions come first.
+        """
+        true_predictions = [(pred, dec) for (pred, dec, y) in zip(utterances, decisions, y_hats) if y]
+        false_predictions = [(pred, dec) for (pred, dec, y) in zip(utterances, decisions, y_hats) if not y]
+        total_pairs = 0
+        px_gt_py = 0
+        reranked_predictions, reranked_y_hats = [], []
 
-        if step % 100000 == 0:
-            print 'decomposablePrediction: {} at step {}'.format(str(predict.flatten()), step)
-            print 'Loss: {} Accuracy before: {} Accuracy after: {}\n'.format(
-                loss, accuracy, accuracy_after)
+        for true_pred_utter, true_pred_dec in true_predictions:
+            for false_pred_utter, false_pred_dec in false_predictions:
+                train_params = [np.array([false_pred_utter, true_pred_utter]),
+                                np.array([false_pred_dec, true_pred_dec])]
+                prediction = self._decomposable.predict_on_batch(train_params)
+                total_pairs += 1
 
+                # rank the two examples
+                prob_false = prediction[0][1]  # prob that false example is true - should be low
+                prob_true = prediction[1][1]  # prob that true example is true - should be high
+
+                # don't care about the actual class of the prediction
+                # only care about the relative order of the probabilities
+                if prob_false < prob_true:  # the true must be 'truer' than the false
+                    px_gt_py += 1  # prediction is correct
+                    # rank according to prediction
+                    reranked_predictions.insert(0, prediction)
+                    reranked_y_hats.insert(0, 1)
+                else:
+                    # rank according to prediction
+                    reranked_predictions.append(prediction)
+                    reranked_y_hats.append(0)
+
+        return [np.array(reranked_predictions), np.array(reranked_predictions)], float(px_gt_py) / total_pairs

@@ -178,13 +178,10 @@ class Ranker(object):
         self.model.add(Dense(hidden_len, name='entail2',
                              init='he_normal', W_regularizer=l2(L2)))
         self.model.add(Activation('relu'))
-        self.model.add(Dense(1, name='entail_out', activation='relu',
+        self.model.add(Dense(out_len, name='entail_out', activation='softmax',
                              W_regularizer=l2(L2), init='zero'))
 
     def __call__(self, compare_utter, compare_path):
         ranker = merge([compare_utter, compare_path], mode='concat')
-        # ranker = K.permute_dimensions(ranker, (1, 0))  # transpose (?, 20) -> (20, ?)
-        # ranker = K.transpose(ranker)
-        # ranker = merge(ranker, mode='transpose')
         ranker = self.model(ranker)
         return ranker
