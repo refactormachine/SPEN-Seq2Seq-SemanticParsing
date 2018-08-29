@@ -1,3 +1,5 @@
+import csv
+import glob
 import os
 import random
 from itertools import izip
@@ -53,6 +55,9 @@ class Experiment(gtd.ml.experiment.TFExperiment):
 
     def __init__(self, config, save_dir):
         super(Experiment, self).__init__(config, save_dir)
+        self._decomposable_csv = None
+        self._train_loop_count = 0
+
         self.workspace.add_file('train_visualize', 'train_visualizer.txt')
         self.workspace.add_file('valid_visualize', 'valid_visualizer.txt')
         self.workspace.add_file('full_eval', 'full_eval_at_{step}.txt')
@@ -227,7 +232,8 @@ class Experiment(gtd.ml.experiment.TFExperiment):
         return Decoder(train_parse_model, self.config.decoder, self._domain, self.glove_embeddings,
                        self._domain.fixed_predicates,
                        utterance_length * utterance_num,
-                       iterations_per_utterance * utterance_num
+                       iterations_per_utterance * utterance_num,
+                       self.tb_logger
                        )
 
     @cached_property
@@ -260,6 +266,17 @@ class Experiment(gtd.ml.experiment.TFExperiment):
     def final_examples(self):
         return self._examples[2]
 
+    @property
+    def decomposable_csv(self):
+        # if not self._decomposable_csv:
+            # first run - clean decomposable data directory
+            # files = glob.glob(os.path.join(DataDirectory.decomposable, '*'))
+            # for f in files:
+                # os.remove(f)
+        filename = os.path.join(DataDirectory.decomposable, 'decomposable%s.csv')
+        self._decomposable_csv = filename % self._train_loop_count
+        return self._decomposable_csv
+
     def train(self):
         decoder = self.decoder
         eval_steps = self.config.timing.eval
@@ -270,8 +287,10 @@ class Experiment(gtd.ml.experiment.TFExperiment):
         while True:
             train_examples = random.sample(self.train_examples, k=len(self.train_examples))  # random shuffle
             train_examples = verboserate(train_examples, desc='Streaming training Examples')
+            self._train_loop_count += 1
             for example_batch in as_batches(train_examples, self.config.batch_size):
                 decoder.train_step(example_batch)
+                self.save_decomposable_data_to_csv(decoder.decomposable_data)
                 step = decoder.step
 
                 self.report_cache_stats(step)
@@ -293,6 +312,13 @@ class Experiment(gtd.ml.experiment.TFExperiment):
                     self.evaluate(step)
                     self.saver.save(step)
                     return
+
+    def save_decomposable_data_to_csv(self, decomposable_data):
+        with open(self.decomposable_csv, 'at') as csv_file:
+            csv_writer = csv.writer(csv_file, delimiter=',', quoting=csv.QUOTE_MINIMAL)
+            for decom in decomposable_data:
+                csv_writer.writerow(decom)
+
 
     # def supervised_train(self):
     #     train_parse_model = self.train_parse_model

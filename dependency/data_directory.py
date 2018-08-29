@@ -107,6 +107,10 @@ class DataDirectory:
     results = _base_dir.add_dir(
             'results', sync=True).absolute_path
 
+    # Directory for decomposable data
+    decomposable = _base_dir.add_dir(
+        'decomposable', sync=True).absolute_path
+
     @classmethod
     def relative_path(cls, path):
         """Returns the relative path from the data root dir of an absolute

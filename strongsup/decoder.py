@@ -1,19 +1,19 @@
+import csv
+import itertools
+import os
+import random
 from collections import namedtuple
 
-import tensorflow as tf
 import numpy as np
-import os
-import cPickle as pickle
-import jsonpickle
 import tensorflow as tf
 from gtd.utils import flatten
+from gtd.chrono import verboserate
+from keras.utils.np_utils import to_categorical
 
-from gtd.utils import flatten, as_batches
 from strongsup.case_weighter import get_case_weighter
-from strongsup.tests.keras_decomposable_attention import build_model
+from strongsup.decomposable import decomposable_model_generation
 from strongsup.value import check_denotation
 from strongsup.value_function import get_value_function, ValueFunctionExample
-from strongsup.value import check_denotation
 
 
 class NormalizationOptions(object):
@@ -36,7 +36,8 @@ class Decoder(object):
     """
 
     def __init__(self, parse_model, config, domain, glove_embeddings, predicates,
-                 utter_len, max_stack_size, predicate_embedder_type='one_hot'):
+                 utter_len, max_stack_size, tb_logger,
+                 predicate_embedder_type='one_hot', decomposable_weights_file=None):
         """Create a new decoder.
 
         Args:
@@ -51,24 +52,19 @@ class Decoder(object):
         self._glove_embeddings = glove_embeddings
         self._parse_model = parse_model
         self._value_function = get_value_function(
-            config.value_function, parse_model.parse_model)
+            config.value_function, parse_model.parse_model) if parse_model else None
         self._case_weighter = get_case_weighter(
             config.case_weighter, parse_model.parse_model,
-            self._value_function)
+            self._value_function) if parse_model else None
         self._config = config
         self._caching = config.inputs_caching
         self._domain = domain
         self._path_checker = domain.path_checker
         self._utter_len = utter_len
         self._max_stack_size = max_stack_size
-        self._train_step_count = 0
-        self._class_weight = {0: 1., 1: 5.}
-        self._predicate_embedder_type = predicate_embedder_type
-        self.correct_predictions = 0
-        self.all_predictions = 0
-        self._samples_beams_decomposable = [[], []]
-        self._y_hat_decomposable = []
-        self._cur_dir = os.getcwd()
+        self._tb_logger = tb_logger
+        self._decomposable_data = None
+        self._decomposable_weights_file = decomposable_weights_file
 
         # Normalization and update policy
         self._normalization = config.normalization
@@ -77,11 +73,16 @@ class Decoder(object):
         self._predicate2index = self._build_predicate_dictionary(predicates)
 
         # 100 is the glove embedding length per word
-        shape_utt = (self._utter_len, 100, 2)
-        shape_path = (self._max_stack_size, len(self.predicate_dictionary), 2) if \
-            self._predicate_embedder_type == 'one_hot' else (self._max_stack_size, 96, 2)
-        settings = {'lr': 0.1, 'dropout': 0.2, 'gru_encode': True}
-        self._decomposable = build_model(shape_utt, shape_path, settings)
+        max_len_utter = 100
+        hidden_layers_num = 15
+        settings = {'lr': 0.0001, 'dropout': 0.05}
+        classifications = 2
+        self._decomposable = decomposable_model_generation(
+            (self._utter_len, max_len_utter), (self._max_stack_size, len(self.predicate_dictionary)),
+            hidden_layers_num, classifications, settings)
+
+        # if decomposable_weights_file and os.path.isfile(decomposable_weights_file):
+        #     self._decomposable.load_weights(decomposable_weights_file)
 
         # Exploration policy
         # TODO: Resolve this circular import differently
@@ -112,6 +113,10 @@ class Decoder(object):
     @property
     def predicate_dictionary(self):
         return self._predicate2index
+
+    @property
+    def decomposable_data(self):
+        return self._decomposable_data
 
     @staticmethod
     def _build_predicate_dictionary(predicates):
@@ -194,7 +199,7 @@ class Decoder(object):
 
         for i, decision in enumerate(decisions):
             one_hot_decision = np.zeros(shape=len(pred_dict))
-            one_hot_decision[pred_dict[decision.name]] = 1
+            one_hot_decision[pred_dict[decision]] = 1
             one_hot_decisions[i] = one_hot_decision
         return np.array(one_hot_decisions)
 
@@ -237,7 +242,8 @@ class Decoder(object):
     def train_step(self, examples):
         # sample a beam of logical forms for each example
         beams = self.predictions(examples, train=True)
-        self.add_decomposable_examples(beams, examples)
+
+        self._decomposable_data = self.train_decomposable_batches(beams, examples)
 
         all_cases = []  # a list of ParseCases to give to ParseModel
         all_case_weights = []  # the weights associated with the cases
@@ -268,31 +274,15 @@ class Decoder(object):
         self._parse_model.train_step(
             cases_to_reinforce, weights_to_reinforce, caching=False)
 
-    def decisions_embedder(self, path_decisions, path_cases=None):
+    def decisions_embedder(self, decisions, path_cases=None):
         """
         predicate_embedder_type can either be 'one_hot' or 'stack_embedder'
-        :param path_decisions: path._decisions from the beam path
+        :param decisions: path._decisions.name from the beam path
         :param path_cases: path._cases from the beam path
         :return:
         """
-        if self._predicate_embedder_type == 'stack_embedder':
-            # define variables to fetch
-            fetch = {
-                'stack_embedder': self.parse_model._parse_model._stack_embedder.embeds
-            }
-
-            # fetch variables
-            sess = tf.get_default_session()
-            if sess is None:
-                raise ValueError('No default TensorFlow Session registered.')
-
-            feed = self.parse_model._parse_model._stack_embedder.inputs_to_feed_dict(path_cases)
-            result = sess.run(fetch, feed_dict=feed)
-            decisions_embedder = result['stack_embedder']  # stack_embedder_dim:96
-            dim = 96
-        else:  # assume it's 'one_hot'
-            decisions_embedder = self.decisions_to_one_hot(path_decisions)
-            dim = len(self.predicate_dictionary)
+        decisions_embedder = self.decisions_to_one_hot(decisions)
+        dim = len(self.predicate_dictionary)
 
         decisions_embedder = np.concatenate((
             decisions_embedder,
@@ -301,83 +291,281 @@ class Decoder(object):
 
         return decisions_embedder
 
-    def add_decomposable_examples(self, beams, examples):
-        self._train_step_count += 1
-        if self._train_step_count < 20:
-            return
+    def train_decomposable_batches(self, beams, examples):
+        y_hat_batch, decisions, utterances = [], [], []
 
         for example, beam in zip(examples, beams):
             if len(beam._paths) == 0:
                 continue
 
-            utter_embds = []
+            beam_batch_correct = False
+            sentence_for_print = ''
+            curr_decisions, curr_utterances, curr_y_hat_batch = [], [], []
 
             for utter in beam._paths[0].context.utterances:
                 for token in utter._tokens:
-                    utter_embds += [self._glove_embeddings[token]]
-            utter_embds = np.array(utter_embds)
+                    sentence_for_print += token + ' '
 
+            for path in beam._paths:
+                check_denote = int(check_denotation(example.answer, path.finalized_denotation))
+                curr_y_hat_batch.append(check_denote)
+                full_decision_for_print = ''
+
+                if check_denote:
+                    beam_batch_correct = True
+
+                for decision in path.decisions:
+                    full_decision_for_print += ' ' + decision._name
+
+                curr_decisions.append(full_decision_for_print)
+                curr_utterances.append(sentence_for_print)
+
+            # at least one correct path
+            if not beam_batch_correct:
+                continue
+
+            # append to result vectors
+            decisions.extend(curr_decisions)
+            utterances.extend(curr_utterances)
+            y_hat_batch.extend(curr_y_hat_batch)
+
+        decomposable_data = [[utter, dec, y] for utter, dec, y in zip(utterances, decisions, y_hat_batch)]
+
+        return decomposable_data
+
+    def decomposable_from_csv(self, csv_file, weights_from_epoch=""):
+        if weights_from_epoch:  # test mode
+            decomposable_weights_file = self._decomposable_weights_file.format(weights_from_epoch)
+            self._decomposable.load_weights(decomposable_weights_file)
+            decisions, utterances, y_hats = self.read_decomposable_csv_test(csv_file)
+            self.test_decomposable_epoch(decisions, utterances, y_hats)
+        else:
+            decisions, utterances, y_hats = self.read_decomposable_csv_train(csv_file)
+            self.train_decomposable_epoch(decisions, utterances, y_hats)
+
+    def train_decomposable_epoch(self, decisions, utterances, y_hats):
+        num_batches = 32
+        epochs = verboserate(xrange(1000000), desc='Training decomposable model')
+        population = xrange(0, len(decisions))
+
+        for epoch in epochs:
+            # sample a batch
+            batch_indices = random.sample(population, num_batches)
+
+            curr_utterances = np.array(np.array(utterances)[batch_indices])
+            curr_decisions = np.array(np.array(decisions)[batch_indices])
+            curr_y_hats = np.array(np.array(y_hats)[batch_indices])
+
+            # randomize batch
+            randomize = np.arange(len(curr_utterances))
+            np.random.shuffle(randomize)
+            curr_utterances = curr_utterances[randomize]
+            curr_decisions = curr_decisions[randomize]
+            curr_y_hats = curr_y_hats[randomize]
+
+            self.train_decomposable_on_example(curr_utterances, curr_decisions, curr_y_hats, epoch)
+
+            if epoch % 5000 == 0:
+                self._decomposable.save_weights(self._decomposable_weights_file.format(epoch))
+
+    def test_decomposable_epoch(self, decisions, utterances, y_hats):
+        epochs = verboserate(xrange(1, 1000), desc='Training decomposable model')
+        population = xrange(0, len(decisions))
+        num_batches = 1
+        correct = 0
+
+        for epoch in epochs:
+            # sample a batch
+            batch_index = random.sample(population, num_batches)[0]
+
+            curr_utterances = np.array(np.array(utterances)[batch_index])
+            curr_decisions = np.array(np.array(decisions)[batch_index])
+            curr_y_hats = np.array(np.array(y_hats)[batch_index])
+
+            # randomize batch
+            randomize = np.arange(len(curr_utterances))
+            np.random.shuffle(randomize)
+            curr_utterances = curr_utterances[randomize]
+            curr_decisions = curr_decisions[randomize]
+            curr_y_hats = curr_y_hats[randomize]
+
+            correct += self.test_decomposable_on_example(curr_utterances, curr_decisions, curr_y_hats, epoch)
+
+            if epoch % 100 == 0:
+                print '\nAccuracy of highest prob: {}'.format(float(correct) / epoch)
+
+    def read_decomposable_csv_train(self, csv_file):
+        utterances, decisions, y_hats = [], [], []
+
+        with open(csv_file, 'rt') as csvfile:
+            csv_reader = csv.reader(csvfile, delimiter=',')
+            curr_utterances, curr_decisions, curr_y_hats = [], [], []
+            prev_utterance, prev_decision, prev_y_hat = None, None, None
+            skip = False  # we only want the first and last example of each batch
+
+            for utterance, decision, y_hat in csv_reader:
+                y_hat = float(y_hat)
+
+                if not prev_utterance:  # first time initialization
+                    prev_utterance = utterance
+                    prev_decision = decision
+                    prev_y_hat = y_hat
+
+                if prev_utterance != utterance:
+                    # append the last example of the previous batch
+                    curr_utterances.append(prev_utterance)
+                    curr_decisions.append(prev_decision)
+                    curr_y_hats.append(prev_y_hat)
+
+                    # append to complete prev batch
+                    utterances.extend(curr_utterances)
+                    decisions.extend(curr_decisions)
+                    y_hats.extend(curr_y_hats)
+
+                    curr_utterances, curr_decisions, curr_y_hats = [], [], []
+                    skip = False
+
+                prev_utterance = utterance
+                prev_decision = decision
+                prev_y_hat = y_hat
+
+                if not skip:  # append the first
+                    curr_utterances.append(utterance)
+                    curr_decisions.append(decision)
+                    curr_y_hats.append(y_hat)
+                    skip = True
+
+            # append the last batch after we finish reading csv
+            curr_utterances.append(prev_utterance)
+            curr_decisions.append(prev_decision)
+            curr_y_hats.append(prev_y_hat)
+
+            utterances.extend(curr_utterances)
+            decisions.extend(curr_decisions)
+            y_hats.extend(curr_y_hats)
+
+        return decisions, utterances, y_hats
+
+    def read_decomposable_csv_test(self, csv_file):
+        utterances, decisions, y_hats = [], [], []
+
+        with open(csv_file, 'rt') as csvfile:
+            csv_reader = csv.reader(csvfile, delimiter=',')
+            curr_utterances, curr_decisions, curr_y_hats = [], [], []
+            prev_utterance = None
+
+            for utterance, decision, y_hat in csv_reader:
+                y_hat = float(y_hat)
+
+                if not prev_utterance:
+                    prev_utterance = utterance
+
+                if prev_utterance != utterance:
+                    utterances.append(curr_utterances)
+                    decisions.append(curr_decisions)
+                    y_hats.append(curr_y_hats)
+
+                    curr_utterances, curr_decisions, curr_y_hats = [], [], []
+                    prev_utterance = utterance
+
+                curr_utterances.append(utterance)
+                curr_decisions.append(decision)
+                curr_y_hats.append(y_hat)
+
+            # append the last batch after we finish reading csv
+            curr_utterances.append(utterance)
+            curr_decisions.append(decision)
+            curr_y_hats.append(y_hat)
+
+        return decisions, utterances, y_hats
+
+    def train_decomposable_on_example(self, utters_batch, decisions_batch, y_hats_batch, step):
+        train_decisions_batch, train_utters_batch, y_hat_batch = \
+            self.get_trainable_batches(utters_batch, decisions_batch, y_hats_batch)
+
+        loss, accuracy = self._decomposable.train_on_batch(
+            [train_utters_batch, train_decisions_batch],
+            to_categorical(y_hat_batch))
+        # prediction = self._decomposable.predict_on_batch([train_utters_batch, train_decisions_batch])
+
+        self._tb_logger.log('decomposableLoss', loss, step)
+        self._tb_logger.log('decomposableAccuracy', accuracy, step)
+
+        if step % 1000 == 0:
+            learning_to_rank = self.pairwise_approach(train_utters_batch, train_decisions_batch, y_hat_batch)
+            self._tb_logger.log('decomposableRanker', learning_to_rank, step)
+
+    def test_decomposable_on_example(self, utters_batch, decisions_batch, y_hats_batch, step):
+        test_decisions_batch, test_utters_batch, y_hat_batch = \
+            self.get_trainable_batches(utters_batch, decisions_batch, y_hats_batch)
+
+        predictions = self._decomposable.predict_on_batch(
+            [test_utters_batch, test_decisions_batch])
+
+        value, index = max([(v[1], i) for i, v in enumerate(predictions)])
+
+        return y_hats_batch[index] == 1
+
+    def get_trainable_batches(self, utters_batch, decisions_batch, y_hats_batch):
+        train_utters_batch = []
+        train_decisions_batch = []
+        y_hat_batch = []
+
+        for decision, utter, y_hat in zip(decisions_batch, utters_batch, y_hats_batch):
+            decision_tokens = decision.split()
+
+            utter_embds = []
+            for token in utter.split():
+                utter_embds += [self._glove_embeddings[token]]
+
+            utter_embds = np.array(utter_embds)
             utter_embds = np.concatenate((
                 utter_embds,
                 np.full((self._utter_len - len(utter_embds), 100), 0.)
             ))
 
-            for idx, path in enumerate(beam._paths):
-                check_denote = int(check_denotation(example.answer, path.finalized_denotation))
-                y_hat = [0, 0]
-                y_hat[check_denote] = 1
-                self._y_hat_decomposable.append(y_hat)
-                self.correct_predictions += check_denote
-                self.all_predictions += 1
+            decisions_embedder = self.decisions_embedder(decision_tokens)
 
-                decisions_embedder = self.decisions_embedder(path.decisions, path._cases)
+            train_utters_batch.append(utter_embds)
+            train_decisions_batch.append(decisions_embedder)
+            y_hat_batch.append(y_hat)
+        train_utters_batch = np.array(train_utters_batch)
+        train_decisions_batch = np.array(train_decisions_batch)
+        y_hat_batch = np.array(y_hat_batch)
 
-                self._samples_beams_decomposable[0].append(utter_embds)
-                self._samples_beams_decomposable[1].append(decisions_embedder)
+        return train_decisions_batch, train_utters_batch, y_hat_batch
 
-    def pickle_all_examples(self):
-        with open(os.path.join(self._cur_dir, 'samples_beams.cpkl'), 'wb') as samples_file:
-            pickle.dump(self._samples_beams_decomposable, samples_file)
+    def pairwise_approach(self, utterances, decisions, y_hats):
+        """
+        Rerank a batch and calculate index of how good the reranker is.
+        The index implements the pairwise approach to ranking.
+        The goal for the ranker is to minimize the number of inversions in ranking,
+        i.e. cases where the pair of results are in the wrong order relative to the ground truth.
+        :param utterances: ndarray of shape (BATCH_SIZE, 2) of utterances (e.g. BATCH_SIZE=32)
+        :param decisions: ndarray of shape (BATCH_SIZE, 2) of decisions (e.g. BATCH_SIZE=32)
+        :param y_hats: ndarray of shape (BATCH_SIZE, 2) of ground truth labels to predictions (e.g. BATCH_SIZE=32)
+        :return: A list of (utterances, decisions) and accuracy.
+        The list's order assures that the True predictions come first.
+        """
+        true_predictions = [(pred, dec) for (pred, dec, y) in zip(utterances, decisions, y_hats) if y]
+        false_predictions = [(pred, dec) for (pred, dec, y) in zip(utterances, decisions, y_hats) if not y]
+        total_pairs = 0
+        px_gt_py = 0
 
-        with open(os.path.join(self._cur_dir, 'y_hat.cpkl'), 'wb') as y_hat_file:
-            pickle.dump(self._y_hat_decomposable,y_hat_file)
+        for (false_pred_utter, false_pred_dec), (true_pred_utter, true_pred_dec) \
+                in itertools.product(false_predictions, true_predictions):
+            predict_params = [np.array([false_pred_utter, true_pred_utter]),
+                              np.array([false_pred_dec, true_pred_dec])]
+            prediction = self._decomposable.predict_on_batch(predict_params)
+            total_pairs += 1
 
+            # rank the two examples
+            prob_false = prediction[0][1]  # prob that false example is true - should be low
+            prob_true = prediction[1][1]  # prob that true example is true - should be high
 
-    def train_decomposable(self):
+            # don't care about the actual class of the prediction
+            # only care about the relative order of the probabilities
+            if prob_false < prob_true:  # the true must be 'truer' than the false
+                px_gt_py += 1  # prediction is correct
 
-        samples_file =  open(os.path.join(self._cur_dir, 'samples_beams.cpkl'), 'rb')
-        self._samples_beams_decomposable = pickle.load(samples_file)
-
-        y_hat_file =  open(os.path.join(self._cur_dir, 'y_hat.cpkl'), 'rb')
-        self._y_hat_decomposable = pickle.load(y_hat_file)
-
-        sanity_check_size1 = len(self._samples_beams_decomposable[0])
-        sanity_check_size2 = len(self._samples_beams_decomposable[1])
-        sanity_check_size3 = len(self._y_hat_decomposable)
-
-        self._samples_beams_decomposable[0] = np.array(self._samples_beams_decomposable[0])
-        self._samples_beams_decomposable[1] = np.array(self._samples_beams_decomposable[1])
-        y_hat_batch = np.array(self._y_hat_decomposable)
-
-        randomize = np.arange(len(self._samples_beams_decomposable[0]))
-        np.random.shuffle(randomize)
-        self._samples_beams_decomposable[0] = self._samples_beams_decomposable[0][randomize]
-        self._samples_beams_decomposable[1] = self._samples_beams_decomposable[1][randomize]
-        y_hat_batch = y_hat_batch[randomize]
-
-        for itr in range(0, len(self._samples_beams_decomposable[0]), 10):
-            inputs = [np.array([self._samples_beams_decomposable[0][itr * 10 + idx]
-                                for idx in range(min(10, len(self._samples_beams_decomposable[0]) - itr))]),
-                      np.array([self._samples_beams_decomposable[1][itr * 10 + idx]
-                                for idx in range(min(10, len(self._samples_beams_decomposable[0]) - itr))])]
-
-            print self._decomposable.train_on_batch(inputs,
-                                                    np.array([y_hat_batch[itr * 10 + idx] for idx
-                                                              in range(min(10, len(self._samples_beams_decomposable[0]) - itr))])
-                                                    , class_weight=self._class_weight)
-
-        if self._train_step_count % 1 == 0:
-            for itr in range(len(self._samples_beams_decomposable[0])):
-                inputs = [np.array([self._samples_beams_decomposable[0][itr]]),
-                          np.array([self._samples_beams_decomposable[1][itr]])]
-                print self._decomposable.predict_on_batch(inputs)
+        return float(px_gt_py) / total_pairs
