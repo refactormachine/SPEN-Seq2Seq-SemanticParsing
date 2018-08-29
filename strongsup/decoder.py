@@ -413,7 +413,7 @@ class Decoder(object):
 
         num_batches = len(decisions)
 
-        for i in xrange(100000):
+        for i in xrange(10000000):
             batch_indices = random.sample(xrange(1, num_batches), BATCH_SIZE)
             curr_utterances, curr_decisions, curr_y_hats, curr_beam_scores = [], [], [], []
 
