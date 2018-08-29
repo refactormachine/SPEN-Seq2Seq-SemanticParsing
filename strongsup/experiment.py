@@ -16,8 +16,8 @@ from gtd.utils import cached_property, as_batches, random_seed, sample_if_large
 from strongsup.decoder import Decoder
 from strongsup.domain import get_domain
 from strongsup.embeddings import (
-        StaticPredicateEmbeddings, GloveEmbeddings, TypeEmbeddings,
-        RLongPrimitiveEmbeddings)
+    StaticPredicateEmbeddings, GloveEmbeddings, TypeEmbeddings,
+    RLongPrimitiveEmbeddings)
 from strongsup.evaluation import Evaluation, BernoulliSequenceStat
 from strongsup.example import Example, DelexicalizedContext
 from strongsup.parse_case import ParsePath
@@ -39,7 +39,6 @@ from strongsup.visualizer import Visualizer
 class Experiments(gtd.ml.experiment.Experiments):
     def __init__(self, check_commit=True):
         """Create Experiments.
-
         If check_commit is true, this will not allow you to run old experiments
         without being on the correct commit number, or old experiments where
         the working directory was not clean.
@@ -114,9 +113,7 @@ class Experiment(gtd.ml.experiment.TFExperiment):
 
     def _build_train_parse_model(self):
         """Construct the TrainParseModel.
-
         If weights have been saved to disk, restore those weights.
-
         Returns:
             TrainParseModel
         """
@@ -149,8 +146,8 @@ class Experiment(gtd.ml.experiment.TFExperiment):
 
         # static
         static_pred_embeddings = StaticPredicateEmbeddings(
-                dyn_pred_embedder.embed_dim,   # matching dim
-                self._domain.fixed_predicates)
+            dyn_pred_embedder.embed_dim,  # matching dim
+            self._domain.fixed_predicates)
         static_pred_embedder = TokenEmbedder(static_pred_embeddings, 'static_pred_embeds')
 
         # combined
@@ -195,7 +192,7 @@ class Experiment(gtd.ml.experiment.TFExperiment):
                                                         max_stack_size, max_list_size)
 
             stack_embedder = ExecutionStackEmbedder(stack_primitive_embedder, stack_object_embedder,
-                                                    max_stack_size=max_stack_size,  max_list_size=max_list_size,
+                                                    max_stack_size=max_stack_size, max_list_size=max_list_size,
                                                     project_object_embeds=True, abstract_objects=False)
         else:
             stack_embedder = None
@@ -268,14 +265,13 @@ class Experiment(gtd.ml.experiment.TFExperiment):
 
     @property
     def decomposable_csv(self):
-        # if not self._decomposable_csv:
-            # first run - clean decomposable data directory
-            # files = glob.glob(os.path.join(DataDirectory.decomposable, '*'))
-            # for f in files:
-                # os.remove(f)
-        filename = os.path.join(DataDirectory.decomposable, 'decomposable%s.csv')
-        self._decomposable_csv = filename % self._train_loop_count
+        filename = os.path.join(DataDirectory.decomposable, 'decomposable%s-test.csv')
+        self._decomposable_csv = filename % (self._train_loop_count % 2)
         return self._decomposable_csv
+
+    def delete_file(self):
+        if os.path.isfile(self.decomposable_csv):
+            os.remove(self.decomposable_csv)
 
     def train(self):
         decoder = self.decoder
@@ -288,27 +284,20 @@ class Experiment(gtd.ml.experiment.TFExperiment):
             train_examples = random.sample(self.final_examples, k=len(self.final_examples))  # random shuffle
             train_examples = verboserate(train_examples, desc='Streaming training Examples')
             self._train_loop_count += 1
+            self.delete_file()
             for example_batch in as_batches(train_examples, self.config.batch_size):
                 decoder.train_step(example_batch)
                 self.save_decomposable_data_to_csv(decoder.decomposable_data)
                 step = decoder.step
 
                 self.report_cache_stats(step)
-                if step > 50:
-                    decoder.pickle_all_examples()
-                    decoder.train_decomposable()
-
                 if (step + 1) % save_steps == 0:
                     self.saver.save(step)
                 if (step + 1) % eval_steps == 0:
                     self.evaluate(step)
-                    decoder.pickle_all_examples()
-                    decoder.train_decomposable()
                 if (step + 1) % big_eval_steps == 0:
                     self.big_evaluate(step)
                 if step >= self.config.max_iters:
-                    decoder.pickle_all_examples()
-                    decoder.train_decomposable()
                     self.evaluate(step)
                     self.saver.save(step)
                     return
@@ -318,7 +307,6 @@ class Experiment(gtd.ml.experiment.TFExperiment):
             csv_writer = csv.writer(csv_file, delimiter=',', quoting=csv.QUOTE_MINIMAL)
             for decom in decomposable_data:
                 csv_writer.writerow(decom)
-
 
     # def supervised_train(self):
     #     train_parse_model = self.train_parse_model
@@ -344,7 +332,7 @@ class Experiment(gtd.ml.experiment.TFExperiment):
     #                 return
 
     def report_cache_stats(self, step):
-        return              # Don't log these
+        return  # Don't log these
         parse_model = self.parse_model
         scorer_cache = parse_model._scorer.inputs_to_feed_dict_cached
         pred_cache = parse_model._pred_embedder.inputs_to_feed_dict_cached
@@ -414,13 +402,11 @@ class Experiment(gtd.ml.experiment.TFExperiment):
 
     def big_evaluate(self, step, num_samples=None):
         """Run more comprehensive evaluation of the model.
-
         How this differs from `self.evaluate`:
         - Compute confidence intervals for denotational accuracy estimates
         - Option to evaluate on a custom/larger number of samples
         - Due to the larger number of samples, don't print everything out to a visualizer.
         - Save stats to a file.
-
         Args:
             step (int)
             num_samples (# samples to evaluate on, for both train and test)
@@ -452,12 +438,9 @@ class Experiment(gtd.ml.experiment.TFExperiment):
 
 def example_to_supervised_cases(example):
     """Convert Example to a list of supervised ParseCases.
-
     Only possible if example.logical_form is known.
-
     Args:
         example (Example)
-
     Returns:
         list[ParseCase]
     """
