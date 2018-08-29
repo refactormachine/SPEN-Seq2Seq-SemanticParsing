@@ -285,7 +285,7 @@ class Experiment(gtd.ml.experiment.TFExperiment):
         self.evaluate(step=decoder.step)  # evaluate once before training begins
 
         while True:
-            train_examples = random.sample(self.train_examples, k=len(self.train_examples))  # random shuffle
+            train_examples = random.sample(self.final_examples, k=len(self.final_examples))  # random shuffle
             train_examples = verboserate(train_examples, desc='Streaming training Examples')
             self._train_loop_count += 1
             for example_batch in as_batches(train_examples, self.config.batch_size):
@@ -294,7 +294,7 @@ class Experiment(gtd.ml.experiment.TFExperiment):
                 step = decoder.step
 
                 self.report_cache_stats(step)
-                if(step > 50):
+                if step > 50:
                     decoder.pickle_all_examples()
                     decoder.train_decomposable()
 
