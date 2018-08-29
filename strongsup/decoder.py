@@ -378,7 +378,7 @@ class Decoder(object):
 
             self.train_decomposable_on_example(curr_utterances, curr_decisions, curr_y_hats, epoch)
 
-            if epoch % 50000 == 0:
+            if epoch % 5000 == 0:
                 self._decomposable.save_weights(self._decomposable_weights_file.format(epoch))
 
     def read_decomposable_csv(self, csv_file):
@@ -436,7 +436,6 @@ class Decoder(object):
         train_decisions_batch, train_utters_batch, y_hat_batch = \
             self.get_trainable_batches(utters_batch, decisions_batch, y_hats_batch)
 
-        learning_to_rank = 0
         loss, accuracy = self._decomposable.train_on_batch(
             [train_utters_batch, train_decisions_batch],
             to_categorical(y_hat_batch))
@@ -445,13 +444,9 @@ class Decoder(object):
         self._tb_logger.log('decomposableLoss', loss, step)
         self._tb_logger.log('decomposableAccuracy', accuracy, step)
 
-        if step > 20000:
+        if step % 1000 == 0:
             learning_to_rank = self.pairwise_approach(train_utters_batch, train_decisions_batch, y_hat_batch)
             self._tb_logger.log('decomposableRanker', learning_to_rank, step)
-
-        if step % 25000 == 0:
-            print '\nRanking index: {} at step {}'.format(learning_to_rank, step)
-            print 'Loss: {} Accuracy: {} '.format(loss, accuracy)
 
     def get_trainable_batches(self, utters_batch, decisions_batch, y_hats_batch):
         train_utters_batch = []
@@ -501,9 +496,9 @@ class Decoder(object):
 
         for (false_pred_utter, false_pred_dec), (true_pred_utter, true_pred_dec) \
                 in itertools.product(false_predictions, true_predictions):
-            train_params = [np.array([false_pred_utter, true_pred_utter]),
-                            np.array([false_pred_dec, true_pred_dec])]
-            prediction = self._decomposable.predict_on_batch(train_params)
+            predict_params = [np.array([false_pred_utter, true_pred_utter]),
+                              np.array([false_pred_dec, true_pred_dec])]
+            prediction = self._decomposable.predict_on_batch(predict_params)
             total_pairs += 1
 
             # rank the two examples
