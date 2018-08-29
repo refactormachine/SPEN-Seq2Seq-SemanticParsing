@@ -478,7 +478,7 @@ class Decoder(object):
         #for i in xrange(1000):
             #beam_batch = [beam_batch[0][0, ::], beam_batch[1][0, ::]]
         loss, accuracy = self._decomposable.train_on_batch(beam_batch, y_gold_batch)
-        if step % 100 == 0:
+        if step % 1000 == 0:
             predict = self._decomposable.predict_on_batch(beam_batch)
             # print 'predict shape: ' + predict.shape()
             for j in xrange(predict.shape[0]):
