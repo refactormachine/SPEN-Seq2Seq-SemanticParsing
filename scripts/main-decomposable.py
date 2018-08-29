@@ -13,8 +13,10 @@ set_log_level('DEBUG')
 
 arg_parser = argparse.ArgumentParser()
 arg_parser.add_argument('exp_id', nargs='+')
+arg_parser.add_argument('--weights_from_epoch', default="")
 args = arg_parser.parse_args()
 exp_id = args.exp_id
+weights_from_epoch = args.weights_from_epoch
 
 
 glove_embeddings = GloveEmbeddings(vocab_size=20000)
@@ -34,4 +36,4 @@ decoder = Decoder(None, config.decoder, domain, glove_embeddings, domain.fixed_p
                   )
 
 csv_file = os.path.join(os.getcwd(), 'data', 'decomposable', 'train-decomposable.csv')
-decoder.train_decomposable_from_csv(csv_file)
+decoder.decomposable_from_csv(csv_file, weights_from_epoch)
