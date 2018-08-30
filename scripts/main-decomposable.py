@@ -1,3 +1,4 @@
+import ConfigParser
 import argparse
 import os
 
@@ -13,10 +14,8 @@ set_log_level('DEBUG')
 
 arg_parser = argparse.ArgumentParser()
 arg_parser.add_argument('exp_id', nargs='+')
-arg_parser.add_argument('--weights_from_epoch', default="")
 args = arg_parser.parse_args()
 exp_id = args.exp_id
-weights_from_epoch = args.weights_from_epoch
 
 
 glove_embeddings = GloveEmbeddings(vocab_size=20000)
@@ -27,13 +26,22 @@ utterance_num = config.parse_model.utterance_embedder.utterance_num
 iterations_per_utterance = config.decoder.train_exploration_policy.iterations_per_utterance
 tb_logger = TensorBoardLogger(os.path.join(os.getcwd(), 'data', 'decomposable', 'tensorboard'))
 decomposable_weights_file = os.path.join(os.getcwd(), 'data', 'decomposable', 'decomposable_weights_{}.hdf5')
+decomposable_config_file = os.path.join(os.getcwd(), 'data', 'decomposable', 'decomposable_config.ini')
+
+deco_config = ConfigParser.ConfigParser()
+deco_config.read(decomposable_config_file)
+deco_config = dict(deco_config.items('Params'))
+deco_config['lr'] = float(deco_config['lr'])
+deco_config['dropout'] = float(deco_config['dropout'])
+deco_config['hidden_layers'] = int(deco_config['hidden_layers'])
 
 decoder = Decoder(None, config.decoder, domain, glove_embeddings, domain.fixed_predicates,
                   utterance_length * utterance_num,
                   iterations_per_utterance * utterance_num,
                   tb_logger,
-                  decomposable_weights_file=decomposable_weights_file
+                  decomposable_weights_file=decomposable_weights_file,
+                  decomposable_config=deco_config
                   )
 
 csv_file = os.path.join(os.getcwd(), 'data', 'decomposable', 'train-decomposable.csv')
-decoder.decomposable_from_csv(csv_file, weights_from_epoch)
+decoder.decomposable_from_csv(csv_file)

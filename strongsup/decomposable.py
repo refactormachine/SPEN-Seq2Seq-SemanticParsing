@@ -1,19 +1,14 @@
-import keras
-import numpy
-
-from keras.layers import Input, Dense, merge, Lambda, GlobalAveragePooling1D, GlobalMaxPooling1D, BatchNormalization, \
-    Dropout, Embedding
+from keras.layers import Input, Dense, merge, GlobalAveragePooling1D, GlobalMaxPooling1D, BatchNormalization, Dropout
 from keras.layers import Activation, TimeDistributed
 from keras.layers import Bidirectional, LSTM
 import keras.backend as K
 from keras.models import Sequential, Model
-from keras.optimizers import Adam
+from keras.optimizers import Adam, Adagrad
 from keras.regularizers import l2
 
 
-def decomposable_model_generation(utter_shape, path_shape,
-                                  hidden_len, classifications, settings):
-    # todo: work on batch
+def decomposable_model_generation(utter_shape, path_shape, classifications, settings):
+    hidden_len = settings['hidden_layers']
     max_utters, utter_size = utter_shape
     max_paths, path_size = path_shape
     utterance_inp = Input(shape=(max_utters, utter_size), dtype='float32', name='uttr_inp')
@@ -42,24 +37,22 @@ def decomposable_model_generation(utter_shape, path_shape,
 
     decomposable_model = Model(input=[utterance_inp, path_inp], output=[ranks])
 
+    if settings['optimizer'].lower() == 'adagrad':
+        optimizer = Adagrad(lr=settings['lr'])
+    else:
+        optimizer = Adam(lr=settings['lr'])
+
     decomposable_model.compile(
-        optimizer=Adam(lr=settings['lr']),
+        optimizer=optimizer,
         loss='binary_crossentropy',
         metrics=['accuracy'])
 
     return decomposable_model
 
 
-def smooth_l1(y_true, y_pred):
-    HUBER_DELTA = 0.5
-    x = K.abs(y_true - y_pred)
-    x = K.tf.where(x < HUBER_DELTA, 0.5 * x ** 2, HUBER_DELTA * (x - 0.5 * HUBER_DELTA))
-    return K.sum(x)
-
-
 class BiLSTM(object):
     def __init__(self, max_length, token_size, hidden_len, dropout=0.0):
-        self.model = Sequential(name='BiLSTM_{}'.format(max_length))
+        self.model = Sequential()
         self.model.add(Bidirectional(LSTM(hidden_len, return_sequences=True,
                                      dropout_W=dropout, dropout_U=dropout),
                                      input_shape=(max_length, token_size)))
@@ -72,7 +65,7 @@ class BiLSTM(object):
 
 class Attention(object):
     def __init__(self, hidden_len, dropout=0.0, L2=0.0):
-        self.model_utter = Sequential(name='sequential_att_utt')
+        self.model_utter = Sequential()
         self.model_utter.add(Dropout(dropout, input_shape=(hidden_len,)))
         self.model_utter.add(
             Dense(hidden_len, name='attend1',
@@ -84,7 +77,7 @@ class Attention(object):
                                    init='he_normal', W_regularizer=l2(L2), activation='relu'))
         self.model_utter = TimeDistributed(self.model_utter)
 
-        self.model_path = Sequential(name='sequential_att_path')
+        self.model_path = Sequential()
         self.model_path.add(Dropout(dropout, input_shape=(hidden_len,)))
         self.model_path.add(
             Dense(hidden_len, name='attend3',
@@ -133,7 +126,7 @@ class Alignment(object):
 
 class CompareAndAggregate(object):
     def __init__(self, hidden_len, L2=0.0, dropout=0.0):
-        self.model_utt = Sequential(name='sequential_cmp_utt')
+        self.model_utt = Sequential()
         self.model_utt.add(Dropout(dropout, input_shape=(hidden_len * 2,)))
         self.model_utt.add(Dense(hidden_len, name='compare1',
                                  init='he_normal', W_regularizer=l2(L2)))
@@ -144,7 +137,7 @@ class CompareAndAggregate(object):
         self.model_utt.add(Activation('relu'))
         self.model_utt = TimeDistributed(self.model_utt)
 
-        self.model_path = Sequential(name='sequential_cmp_path')
+        self.model_path = Sequential()
         self.model_path.add(Dropout(dropout, input_shape=(hidden_len * 2,)))
         self.model_path.add(Dense(hidden_len, name='compare3',
                                   init='he_normal', W_regularizer=l2(L2)))
@@ -169,7 +162,7 @@ class CompareAndAggregate(object):
 
 class Ranker(object):
     def __init__(self, hidden_len, out_len, dropout=0.0, L2=0.0):
-        self.model = Sequential(name='sequential_ranker')
+        self.model = Sequential()
         self.model.add(Dropout(dropout, input_shape=(hidden_len * 2,)))
         self.model.add(Dense(hidden_len, name='hidden_rank',
                              init='he_normal', W_regularizer=l2(L2)))

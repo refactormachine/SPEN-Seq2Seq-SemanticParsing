@@ -36,8 +36,8 @@ class Decoder(object):
     """
 
     def __init__(self, parse_model, config, domain, glove_embeddings, predicates,
-                 utter_len, max_stack_size, tb_logger,
-                 predicate_embedder_type='one_hot', decomposable_weights_file=None):
+                 utter_len, max_stack_size, tb_logger, decomposable_weights_file=None,
+                 decomposable_config=None):
         """Create a new decoder.
 
         Args:
@@ -48,6 +48,9 @@ class Decoder(object):
             predicates
             utter_len
             max_stack_size
+            tb_logger
+            decomposable_weights_file
+            decomposable_config
         """
         self._glove_embeddings = glove_embeddings
         self._parse_model = parse_model
@@ -65,6 +68,7 @@ class Decoder(object):
         self._tb_logger = tb_logger
         self._decomposable_data = None
         self._decomposable_weights_file = decomposable_weights_file
+        self._decomposable_settings = decomposable_config
 
         # Normalization and update policy
         self._normalization = config.normalization
@@ -74,12 +78,10 @@ class Decoder(object):
 
         # 100 is the glove embedding length per word
         max_len_utter = 100
-        hidden_layers_num = 15
-        settings = {'lr': 0.0001, 'dropout': 0.05}
         classifications = 2
         self._decomposable = decomposable_model_generation(
             (self._utter_len, max_len_utter), (self._max_stack_size, len(self.predicate_dictionary)),
-            hidden_layers_num, classifications, settings)
+            classifications, self._decomposable_settings)
 
         # if decomposable_weights_file and os.path.isfile(decomposable_weights_file):
         #     self._decomposable.load_weights(decomposable_weights_file)
@@ -332,14 +334,17 @@ class Decoder(object):
 
         return decomposable_data
 
-    def decomposable_from_csv(self, csv_file, weights_from_epoch=""):
-        if weights_from_epoch:  # test mode
-            decomposable_weights_file = self._decomposable_weights_file.format(weights_from_epoch)
-            self._decomposable.load_weights(decomposable_weights_file)
+    def decomposable_from_csv(self, csv_file):
+        if self._decomposable_settings['weights_for_epoch']:  # test mode
+            weights_file = self._decomposable_weights_file.format(self._decomposable_settings['weights_for_epoch'])
+            self._decomposable.load_weights(weights_file)
             decisions, utterances, y_hats = self.read_decomposable_csv_test(csv_file)
             self.test_decomposable_epoch(utterances, decisions, y_hats)
         else:
-            decisions, utterances, y_hats = self.read_decomposable_csv_best_worst_train(csv_file)
+            if self._decomposable_settings['csv_policy'] == 'all':
+                decisions, utterances, y_hats = self.read_decomposable_csv_all_train(csv_file)
+            else:
+                decisions, utterances, y_hats = self.read_decomposable_csv_best_worst_train(csv_file)
             self.train_decomposable_epoch(utterances, decisions, y_hats)
 
     def train_decomposable_epoch(self, utterances, decisions, y_hats):
