@@ -80,7 +80,7 @@ class Decoder(object):
         max_len_utter = 100
 
         hidden_layers_num = 300
-        settings = {'lr': 0.001, 'dropout': 0.2}
+        settings = {'lr': 0.0001, 'dropout': 0.2}
         # todo: decide exactly which max utter/path lengths to send
         # self._decomposable = decomposable_model_generation(
         #     self._utter_len, self._max_stack_size, hidden_layers_num, 20, settings)
@@ -386,7 +386,7 @@ class Decoder(object):
             curr_utterances, curr_decisions, curr_y_hats, curr_beam_scores = [], [], [], []
             lines_in_block = 0
             # BATCH_SIZE = 30
-            BATCH_SIZE = 1
+            BATCH_SIZE = 3
             BLOCK_SIZE = 20
             last_utterance = ''
             last_decision = ''
