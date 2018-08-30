@@ -265,7 +265,7 @@ class Experiment(gtd.ml.experiment.TFExperiment):
 
     @property
     def decomposable_csv(self):
-        filename = os.path.join(DataDirectory.decomposable, 'decomposable%s-test.csv')
+        filename = os.path.join(DataDirectory.decomposable, 'decomposable%s.csv')
         self._decomposable_csv = filename % (self._train_loop_count % 2)
         return self._decomposable_csv
 
@@ -281,7 +281,7 @@ class Experiment(gtd.ml.experiment.TFExperiment):
         self.evaluate(step=decoder.step)  # evaluate once before training begins
 
         while True:
-            train_examples = random.sample(self.final_examples, k=len(self.final_examples))  # random shuffle
+            train_examples = random.sample(self.train_examples, k=len(self.train_examples))  # random shuffle
             train_examples = verboserate(train_examples, desc='Streaming training Examples')
             self._train_loop_count += 1
             self.delete_file()
