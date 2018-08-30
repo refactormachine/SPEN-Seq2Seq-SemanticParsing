@@ -91,7 +91,9 @@ class Decoder(object):
             hidden_layers_num, classifications, settings)
 
         if decomposable_weights_file and os.path.isfile(decomposable_weights_file):
+            print 'load weight file...'
             self._decomposable.load_weights(decomposable_weights_file)
+            print 'finished loading weight file'
 
         # Exploration policy
         # TODO: Resolve this circular import differently
