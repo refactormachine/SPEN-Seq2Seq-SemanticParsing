@@ -369,7 +369,7 @@ class Decoder(object):
 
             self.train_decomposable_on_example(curr_utterances, curr_decisions, curr_y_hats, epoch)
 
-            if epoch % 5000 == 0:
+            if epoch % 20000 == 0:
                 self._decomposable.save_weights(self._decomposable_weights_file.format(epoch))
 
     def test_decomposable_epoch(self, utterances, decisions, y_hats):
@@ -508,7 +508,7 @@ class Decoder(object):
 
         loss, accuracy = self._decomposable.train_on_batch(
             [train_utters_batch, train_decisions_batch],
-            to_categorical(y_hat_batch))
+            to_categorical(y_hat_batch, nb_classes=2))
 
         self._tb_logger.log('decomposableLoss', loss, step)
         self._tb_logger.log('decomposableAccuracy', accuracy, step)
