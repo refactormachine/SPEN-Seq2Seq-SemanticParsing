@@ -360,6 +360,13 @@ class Decoder(object):
             curr_decisions = np.array(np.array(decisions)[batch_indices])
             curr_y_hats = np.array(np.array(y_hats)[batch_indices])
 
+            while len(np.nonzero(curr_y_hats)[0]) == 0:
+                batch_indices = random.sample(population, num_batches)
+
+                curr_utterances = np.array(np.array(utterances)[batch_indices])
+                curr_decisions = np.array(np.array(decisions)[batch_indices])
+                curr_y_hats = np.array(np.array(y_hats)[batch_indices])
+
             # randomize batch
             randomize = np.arange(len(curr_utterances))
             np.random.shuffle(randomize)
