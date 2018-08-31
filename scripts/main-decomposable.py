@@ -43,5 +43,8 @@ decoder = Decoder(None, config.decoder, domain, glove_embeddings, domain.fixed_p
                   decomposable_config=deco_config
                   )
 
-csv_file = os.path.join(os.getcwd(), 'data', 'decomposable', 'train-decomposable.csv')
+if deco_config['weights_for_epoch']:
+    csv_file = os.path.join(os.getcwd(), 'data', 'decomposable', 'test-decomposable.csv')
+else:
+    csv_file = os.path.join(os.getcwd(), 'data', 'decomposable', 'train-decomposable.csv')
 decoder.decomposable_from_csv(csv_file)
