@@ -381,6 +381,7 @@ class Decoder(object):
 
         return decomposable_data
 
+
     def train_decomposable_from_csv(self, csv_file):
         utterances, decisions, y_hats, beam_scores = [], [], [], []
 
@@ -494,33 +495,3 @@ class Decoder(object):
         self._tb_logger.log('decomposableAccuracy', accuracy, step)
         # print "finished"
         # exit()
-
-    def test_decomposable_epoch(self, utterances, decisions, y_hats):
-        epochs = verboserate(xrange(1, 1000), desc='Testing decomposable model')
-        population = xrange(0, len(decisions))
-        num_batches = 1
-        correct = 0
-
-        for epoch in epochs:
-            # sample a batch
-            batch_index = random.sample(population, num_batches)[0]
-
-            curr_utterances = np.array(np.array(utterances)[batch_index])
-            curr_decisions = np.array(np.array(decisions)[batch_index])
-            curr_y_hats = np.array(np.array(y_hats)[batch_index])
-
-            # randomize batch
-            randomize = np.arange(len(curr_utterances))
-            np.random.shuffle(randomize)
-            curr_utterances = curr_utterances[randomize]
-            curr_decisions = curr_decisions[randomize]
-            curr_y_hats = curr_y_hats[randomize]
-
-            test_decisions_batch, test_utters_batch, y_hat_batch = \
-                self.get_trainable_batches(curr_utterances, curr_decisions, curr_y_hats)
-
-            correct += self.test_decomposable_on_example(test_utters_batch, test_decisions_batch, y_hat_batch)
-            learning_to_rank = self.pairwise_approach(test_utters_batch, test_decisions_batch, y_hat_batch)
-
-            self._tb_logger.log('decomposablePairwiseRanker', learning_to_rank, epoch)
-            self._tb_logger.log('decomposableListwiseRanker', float(correct) / epoch, epoch)
