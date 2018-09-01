@@ -349,7 +349,7 @@ class Decoder(object):
 
     def train_decomposable_epoch(self, utterances, decisions, y_hats):
         num_batches = 32
-        epochs = verboserate(xrange(1000000), desc='Training decomposable model')
+        epochs = verboserate(xrange(1000001), desc='Training decomposable model')
         population = xrange(0, len(decisions))
 
         for epoch in epochs:
@@ -380,10 +380,11 @@ class Decoder(object):
                 self._decomposable.save_weights(self._decomposable_weights_file.format(epoch))
 
     def test_decomposable_epoch(self, utterances, decisions, y_hats):
-        epochs = verboserate(xrange(1, 1000), desc='Testing decomposable model')
+        epochs = verboserate(xrange(1, 1001), desc='Testing decomposable model')
         population = xrange(0, len(decisions))
         num_batches = 1
         correct = 0
+        pairwise_ranker = 0
 
         for epoch in epochs:
             # sample a batch
@@ -405,9 +406,11 @@ class Decoder(object):
 
             correct += self.test_decomposable_on_example(test_utters_batch, test_decisions_batch, y_hat_batch)
             learning_to_rank = self.pairwise_approach(test_utters_batch, test_decisions_batch, y_hat_batch)
+            pairwise_ranker += learning_to_rank
 
             self._tb_logger.log('decomposablePairwiseRanker', learning_to_rank, epoch)
             self._tb_logger.log('decomposableListwiseRanker', float(correct) / epoch, epoch)
+        print 'Pairwise ranker: {}'.format(float(pairwise_ranker)/1000)
 
     def read_decomposable_csv_best_worst_train(self, csv_file):
         utterances, decisions, y_hats = [], [], []
