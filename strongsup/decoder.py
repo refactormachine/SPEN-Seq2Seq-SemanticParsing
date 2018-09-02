@@ -413,20 +413,15 @@ class Decoder(object):
             curr_correct = y_hat_batch[index] == 1
             correct += curr_correct
 
-            if not curr_correct:
-                print str(curr_utterances[0]) + ',' + curr_decisions[index] + ',0'
-                #for i in xrange(len(curr_utterances)):
-                # print curr_decisions[index]
-                #print curr_y_hats[index]
+            # if not curr_correct:
+                # print '\n' + str(curr_utterances[0]) + ',' + curr_decisions[index] + ',0'
 
             learning_to_rank = self.pairwise_approach(test_utters_batch, test_decisions_batch, y_hat_batch)
             pairwise_ranker += learning_to_rank
 
             self._tb_logger.log('decomposablePairwiseRanker', learning_to_rank, epoch)
             self._tb_logger.log('decomposableListwiseRanker', float(correct) / epoch, epoch)
-        print 'Pairwise Accuracy: {}'.format(float(pairwise_ranker)/1000)
-            #self._tb_logger.log('decomposableListwiseRanker', float(correct) / epoch, epoch)
-
+        print 'Pairwise Accuracy: {}'.format(float(pairwise_ranker)/len(decisions))
         print 'Listwise Accuracy: ' + str(float(correct)/len(decisions))
 
     def read_decomposable_csv_best_worst_train(self, csv_file):
