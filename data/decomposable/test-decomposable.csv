@@ -227,30 +227,6 @@ remove third figure , all-objects 5 index all-objects 4 index ASwap,0
 remove third figure , all-objects 2 index all-objects 1 index ASwap,0
 remove third figure , all-objects 1 index all-objects 4 index ASwap,0
 remove third figure , all-objects 2 index all-objects -1 index ASwap,0
-switch 1st and 5th figures , all-objects 5 index all-objects 2 index ASwap,1
-switch 1st and 5th figures , all-objects -1 index all-objects 2 index ASwap,1
-switch 1st and 5th figures , all-objects 2 index all-objects 5 index ASwap,1
-switch 1st and 5th figures , all-objects -1 index all-objects 1 index ASwap,0
-switch 1st and 5th figures , all-objects 2 index all-objects 1 index ASwap,0
-switch 1st and 5th figures , all-objects 3 index all-objects 5 index ASwap,0
-switch 1st and 5th figures , all-objects 3 index all-objects -1 index ASwap,0
-switch 1st and 5th figures , all-objects 5 index all-objects 3 index ASwap,0
-switch 1st and 5th figures , all-objects -1 index all-objects 3 index ASwap,0
-switch 1st and 5th figures , all-objects -1 index all-objects 4 index ASwap,0
-switch 1st and 5th figures , all-objects 4 index all-objects 1 index ASwap,0
-switch 1st and 5th figures , all-objects 4 index all-objects 5 index ASwap,0
-switch 1st and 5th figures , all-objects 4 index all-objects -1 index ASwap,0
-switch 1st and 5th figures , all-objects 3 index all-objects 2 index ASwap,0
-switch 1st and 5th figures , all-objects 2 index all-objects 3 index ASwap,0
-switch 1st and 5th figures , all-objects 2 index all-objects 4 index ASwap,0
-switch 1st and 5th figures , all-objects 5 index ARemove,0
-switch 1st and 5th figures , all-objects -1 index ARemove,0
-switch 1st and 5th figures , all-objects 4 index all-objects 2 index ASwap,0
-switch 1st and 5th figures , all-objects 3 index all-objects 4 index ASwap,0
-switch 1st and 5th figures , all-objects 4 index all-objects 3 index ASwap,0
-switch 1st and 5th figures , all-objects 2 index ARemove,0
-switch 1st and 5th figures , all-objects 3 index ARemove,0
-switch 1st and 5th figures , all-objects 4 index ARemove,0
 remove object 4 , all-objects 4 index ARemove,1
 remove object 4 , all-objects 1 index ARemove,0
 remove object 4 , all-objects 3 index ARemove,0
@@ -948,11 +924,11 @@ remove object 1 , all-objects -1 index ARemove,0
 remove object 1 , all-objects 4 index ARemove,0
 remove object 1 , all-objects 2 index all-objects -1 index ASwap,0
 remove object 1 , all-objects 2 index all-objects 5 index ASwap,0
-swap the third and rightmost figures , all-objects 3 index all-objects 4 index ASwap,1
-swap the third and rightmost figures , all-objects 4 index all-objects 3 index ASwap,1
+swap the third and rightmost figures , all-objects 3 index all-objects 4 index ASwap,0
+swap the third and rightmost figures , all-objects 4 index all-objects 3 index ASwap,0
 swap the third and rightmost figures , all-objects 5 index all-objects 3 index ASwap,0
-swap the third and rightmost figures , all-objects -1 index all-objects 3 index ASwap,0
-swap the third and rightmost figures , all-objects 3 index all-objects -1 index ASwap,0
+swap the third and rightmost figures , all-objects -1 index all-objects 3 index ASwap,1
+swap the third and rightmost figures , all-objects 3 index all-objects -1 index ASwap,1
 swap the third and rightmost figures , all-objects 5 index all-objects 4 index ASwap,0
 swap the third and rightmost figures , all-objects 4 index all-objects 5 index ASwap,0
 swap the third and rightmost figures , all-objects 4 index all-objects -1 index ASwap,0
@@ -1190,13 +1166,13 @@ swap the second and last figures , all-objects 2 index ARemove,0
 swap the second and last figures , all-objects 3 index ARemove,0
 swap the second and last figures , all-objects 1 index ARemove,0
 swap the second and last figures , all-objects 4 index ARemove,0
-swap the 1st and 4th objects , all-objects 5 index all-objects 2 index ASwap,1
-swap the 1st and 4th objects , all-objects -1 index all-objects 2 index ASwap,1
-swap the 1st and 4th objects , all-objects 2 index all-objects 5 index ASwap,1
-swap the 1st and 4th objects , all-objects 2 index all-objects -1 index ASwap,1
+swap the 1st and 4th objects , all-objects 5 index all-objects 2 index ASwap,0
+swap the 1st and 4th objects , all-objects -1 index all-objects 2 index ASwap,0
+swap the 1st and 4th objects , all-objects 2 index all-objects 5 index ASwap,0
+swap the 1st and 4th objects , all-objects 2 index all-objects -1 index ASwap,0
 swap the 1st and 4th objects , all-objects 2 index all-objects 4 index ASwap,0
 swap the 1st and 4th objects , all-objects 1 index all-objects 2 index ASwap,0
-swap the 1st and 4th objects , all-objects 1 index all-objects 4 index ASwap,0
+swap the 1st and 4th objects , all-objects 1 index all-objects 4 index ASwap,1
 swap the 1st and 4th objects , all-objects 3 index all-objects 5 index ASwap,0
 swap the 1st and 4th objects , all-objects 5 index all-objects 3 index ASwap,0
 swap the 1st and 4th objects , all-objects 3 index all-objects -1 index ASwap,0
@@ -1356,8 +1332,8 @@ swap figure 2 for figure 4 , all-objects 2 index ARemove,0
 swap figure 2 for figure 4 , all-objects 5 index ARemove,0
 swap figure 2 for figure 4 , all-objects -1 index ARemove,0
 swap figure 2 for figure 4 , all-objects 3 index ARemove,0
-switch the 3rd and 4th figures , all-objects 2 index all-objects 3 index ASwap,1
-switch the 3rd and 4th figures , all-objects 4 index all-objects 3 index ASwap,0
+switch the 3rd and 4th figures , all-objects 2 index all-objects 3 index ASwap,0
+switch the 3rd and 4th figures , all-objects 4 index all-objects 3 index ASwap,1
 switch the 3rd and 4th figures , all-objects 2 index all-objects 4 index ASwap,0
 switch the 3rd and 4th figures , all-objects -1 index all-objects 3 index ASwap,0
 switch the 3rd and 4th figures , all-objects -1 index all-objects 2 index ASwap,0
@@ -1701,8 +1677,8 @@ swap the 2nd and 4th figure , all-objects 5 index ARemove,0
 swap the 2nd and 4th figure , all-objects -1 index ARemove,0
 swap the 2nd and 4th figure , all-objects 5 index all-objects 1 index ASwap,0
 swap the 2nd and 4th figure , all-objects 1 index ARemove,0
-remove the last figure , all-objects 1 index ARemove,1
-remove the last figure , all-objects -1 index ARemove,0
+remove the last figure , all-objects 1 index ARemove,0
+remove the last figure , all-objects -1 index ARemove,1
 remove the last figure , all-objects 4 index ARemove,0
 remove the last figure , all-objects -1 index all-objects 4 index ASwap,0
 remove the last figure , all-objects 4 index all-objects 1 index ASwap,0
@@ -2210,11 +2186,11 @@ delete the figure in the second position , all-objects 3 index all-objects 2 ind
 delete the figure in the second position , all-objects 2 index all-objects 5 index ASwap,0
 delete the figure in the second position , all-objects 5 index all-objects 2 index ASwap,0
 delete the figure in the second position , all-objects 4 index all-objects 2 index ASwap,0
-switch third and last figures , all-objects 1 index all-objects 3 index ASwap,1
+switch third and last figures , all-objects 1 index all-objects 3 index ASwap,0
 switch third and last figures , all-objects 1 index all-objects 4 index ASwap,0
 switch third and last figures , all-objects 4 index all-objects 3 index ASwap,0
 switch third and last figures , all-objects 4 index all-objects 1 index ASwap,0
-switch third and last figures , all-objects -1 index all-objects 3 index ASwap,0
+switch third and last figures , all-objects -1 index all-objects 3 index ASwap,1
 switch third and last figures , all-objects 1 index all-objects -1 index ASwap,0
 switch third and last figures , all-objects -1 index all-objects 4 index ASwap,0
 switch third and last figures , all-objects 5 index all-objects 4 index ASwap,0
@@ -2430,8 +2406,8 @@ the shapes in the first and fourth spot reverse , all-objects -1 index all-objec
 the shapes in the first and fourth spot reverse , all-objects -1 index all-objects 3 index ASwap,0
 the shapes in the first and fourth spot reverse , all-objects 2 index all-objects 5 index ASwap,0
 the shapes in the first and fourth spot reverse , all-objects 3 index all-objects -1 index ASwap,0
-delete the 3rd image , all-objects 4 index ARemove,1
-delete the 3rd image , all-objects 3 index ARemove,0
+delete the 3rd image , all-objects 4 index ARemove,0
+delete the 3rd image , all-objects 3 index ARemove,1
 delete the 3rd image , all-objects 2 index ARemove,0
 delete the 3rd image , all-objects 2 index all-objects 4 index ASwap,0
 delete the 3rd image , all-objects 5 index ARemove,0
@@ -2523,21 +2499,6 @@ swap the second and last figures , all-objects 5 index ARemove,0
 swap the second and last figures , all-objects 2 index ARemove,0
 swap the second and last figures , all-objects 3 index ARemove,0
 swap the second and last figures , all-objects 4 index ARemove,0
-delete the second to last figure , all-objects 2 index ARemove,1
-delete the second to last figure , all-objects 2 index all-objects -1 index ASwap,0
-delete the second to last figure , all-objects 1 index ARemove,0
-delete the second to last figure , all-objects -1 index ARemove,0
-delete the second to last figure , all-objects 4 index ARemove,0
-delete the second to last figure , all-objects 2 index all-objects 4 index ASwap,0
-delete the second to last figure , all-objects 2 index all-objects 3 index ASwap,0
-delete the second to last figure , all-objects 4 index all-objects 2 index ASwap,0
-delete the second to last figure , all-objects 4 index all-objects 1 index ASwap,0
-delete the second to last figure , all-objects 4 index all-objects -1 index ASwap,0
-delete the second to last figure , all-objects 4 index all-objects 5 index ASwap,0
-delete the second to last figure , all-objects 1 index all-objects -1 index ASwap,0
-delete the second to last figure , all-objects 1 index all-objects 5 index ASwap,0
-delete the second to last figure , all-objects 4 index all-objects 3 index ASwap,0
-delete the second to last figure , all-objects 1 index all-objects 4 index ASwap,0
 delete the rightmost figure , all-objects -1 index ARemove,1
 delete the rightmost figure , all-objects 5 index ARemove,1
 delete the rightmost figure , all-objects 1 index ARemove,0
@@ -3102,30 +3063,6 @@ remove the 1st item , all-objects 5 index all-objects 1 index ASwap,0
 remove the 1st item , all-objects 3 index all-objects 4 index ASwap,0
 remove the 1st item , all-objects -1 index all-objects 2 index ASwap,0
 remove the 1st item , all-objects 2 index all-objects 4 index ASwap,0
-swap the last two , all-objects 1 index all-objects 4 index ASwap,1
-swap the last two , all-objects 4 index all-objects 1 index ASwap,1
-swap the last two , all-objects -1 index all-objects 4 index ASwap,0
-swap the last two , all-objects 5 index all-objects 4 index ASwap,0
-swap the last two , all-objects 2 index all-objects -1 index ASwap,0
-swap the last two , all-objects 4 index all-objects -1 index ASwap,0
-swap the last two , all-objects 1 index all-objects -1 index ASwap,0
-swap the last two , all-objects 4 index all-objects 5 index ASwap,0
-swap the last two , all-objects 2 index all-objects 5 index ASwap,0
-swap the last two , all-objects -1 index all-objects 1 index ASwap,0
-swap the last two , all-objects 1 index all-objects 5 index ASwap,0
-swap the last two , all-objects 2 index all-objects 4 index ASwap,0
-swap the last two , all-objects -1 index all-objects 2 index ASwap,0
-swap the last two , all-objects 2 index all-objects 1 index ASwap,0
-swap the last two , all-objects 5 index all-objects 2 index ASwap,0
-swap the last two , all-objects 4 index all-objects 2 index ASwap,0
-swap the last two , all-objects 1 index ARemove,0
-swap the last two , all-objects 4 index all-objects 3 index ASwap,0
-swap the last two , all-objects 1 index all-objects 3 index ASwap,0
-swap the last two , all-objects 5 index all-objects 3 index ASwap,0
-swap the last two , all-objects 4 index ARemove,0
-swap the last two , all-objects -1 index ARemove,0
-swap the last two , all-objects 5 index ARemove,0
-swap the last two , all-objects 2 index ARemove,0
 swap second and third figures , all-objects 2 index all-objects 3 index ASwap,1
 swap second and third figures , all-objects 4 index all-objects 2 index ASwap,0
 swap second and third figures , all-objects 2 index all-objects -1 index ASwap,0
@@ -3481,9 +3418,9 @@ remove object 2 , all-objects 2 index all-objects -1 index ASwap,0
 remove object 2 , all-objects 2 index all-objects 5 index ASwap,0
 remove object 2 , all-objects 2 index all-objects 3 index ASwap,0
 remove object 2 , all-objects 2 index all-objects 1 index ASwap,0
-swap the third and last figures , all-objects 3 index all-objects 1 index ASwap,1
-swap the third and last figures , all-objects -1 index all-objects 3 index ASwap,0
-swap the third and last figures , all-objects 3 index all-objects -1 index ASwap,0
+swap the third and last figures , all-objects 3 index all-objects 1 index ASwap,0
+swap the third and last figures , all-objects -1 index all-objects 3 index ASwap,1
+swap the third and last figures , all-objects 3 index all-objects -1 index ASwap,1
 swap the third and last figures , all-objects -1 index all-objects 1 index ASwap,0
 swap the third and last figures , all-objects 5 index all-objects 1 index ASwap,0
 swap the third and last figures , all-objects 3 index all-objects 4 index ASwap,0
@@ -3551,11 +3488,11 @@ remove the first figure , all-objects -1 index all-objects 2 index ASwap,0
 remove the first figure , all-objects 2 index all-objects 4 index ASwap,0
 remove the first figure , all-objects 4 index all-objects 2 index ASwap,0
 remove the first figure , all-objects 4 index all-objects -1 index ASwap,0
-swap objects 2 and 5 , all-objects 3 index all-objects -1 index ASwap,1
-swap objects 2 and 5 , all-objects 3 index all-objects 5 index ASwap,1
+swap objects 2 and 5 , all-objects 3 index all-objects -1 index ASwap,0
+swap objects 2 and 5 , all-objects 3 index all-objects 5 index ASwap,0
 swap objects 2 and 5 , all-objects 2 index all-objects -1 index ASwap,0
 swap objects 2 and 5 , all-objects -1 index all-objects 2 index ASwap,0
-swap objects 2 and 5 , all-objects 2 index all-objects 5 index ASwap,0
+swap objects 2 and 5 , all-objects 2 index all-objects 5 index ASwap,1
 swap objects 2 and 5 , all-objects 4 index all-objects 3 index ASwap,0
 swap objects 2 and 5 , all-objects 3 index all-objects 2 index ASwap,0
 swap objects 2 and 5 , all-objects 4 index all-objects 2 index ASwap,0
@@ -3578,8 +3515,8 @@ swap objects 2 and 5 , all-objects 3 index ARemove,0
 swap objects 2 and 5 , all-objects 1 index ARemove,0
 swap objects 2 and 5 , all-objects 4 index ARemove,0
 swap objects 2 and 5 , all-objects 2 index ARemove,0
-take away the object at the end , all-objects 1 index ARemove,1
-take away the object at the end , all-objects -1 index ARemove,0
+take away the object at the end , all-objects 1 index ARemove,0
+take away the object at the end , all-objects -1 index ARemove,1
 take away the object at the end , all-objects 5 index ARemove,0
 take away the object at the end , all-objects 3 index ARemove,0
 take away the object at the end , all-objects 1 index all-objects -1 index ASwap,0
@@ -3991,26 +3928,6 @@ swap the first 2 figures , all-objects 3 index all-objects 5 index ASwap,0
 swap the first 2 figures , all-objects 2 index ARemove,0
 swap the first 2 figures , all-objects 5 index ARemove,0
 swap the first 2 figures , all-objects 3 index ARemove,0
-switch the items in the 3rd and 5th positions , all-objects 1 index all-objects 3 index ASwap,1
-switch the items in the 3rd and 5th positions , all-objects 5 index all-objects 3 index ASwap,0
-switch the items in the 3rd and 5th positions , all-objects -1 index all-objects 3 index ASwap,0
-switch the items in the 3rd and 5th positions , all-objects 2 index all-objects 1 index ASwap,0
-switch the items in the 3rd and 5th positions , all-objects 1 index all-objects 2 index ASwap,0
-switch the items in the 3rd and 5th positions , all-objects 1 index all-objects -1 index ASwap,0
-switch the items in the 3rd and 5th positions , all-objects 1 index all-objects 5 index ASwap,0
-switch the items in the 3rd and 5th positions , all-objects 5 index all-objects 4 index ASwap,0
-switch the items in the 3rd and 5th positions , all-objects -1 index all-objects 4 index ASwap,0
-switch the items in the 3rd and 5th positions , all-objects 5 index all-objects 2 index ASwap,0
-switch the items in the 3rd and 5th positions , all-objects -1 index all-objects 2 index ASwap,0
-switch the items in the 3rd and 5th positions , all-objects 2 index all-objects 5 index ASwap,0
-switch the items in the 3rd and 5th positions , all-objects 1 index all-objects 4 index ASwap,0
-switch the items in the 3rd and 5th positions , all-objects 5 index all-objects 1 index ASwap,0
-switch the items in the 3rd and 5th positions , all-objects -1 index all-objects 1 index ASwap,0
-switch the items in the 3rd and 5th positions , all-objects 2 index all-objects 4 index ASwap,0
-switch the items in the 3rd and 5th positions , all-objects 1 index ARemove,0
-switch the items in the 3rd and 5th positions , all-objects 5 index ARemove,0
-switch the items in the 3rd and 5th positions , all-objects -1 index ARemove,0
-switch the items in the 3rd and 5th positions , all-objects 2 index ARemove,0
 swap the third and last figures , all-objects -1 index all-objects 3 index ASwap,1
 swap the third and last figures , all-objects 3 index all-objects -1 index ASwap,1
 swap the third and last figures , all-objects 3 index all-objects 5 index ASwap,1
@@ -4117,8 +4034,8 @@ swap the third and last ones , all-objects 3 index ARemove,0
 swap the third and last ones , all-objects 1 index ARemove,0
 swap the third and last ones , all-objects 4 index ARemove,0
 swap the third and last ones , all-objects 2 index ARemove,0
-remove the 4th figure , all-objects 2 index ARemove,1
-remove the 4th figure , all-objects 4 index ARemove,0
+remove the 4th figure , all-objects 2 index ARemove,0
+remove the 4th figure , all-objects 4 index ARemove,1
 remove the 4th figure , all-objects -1 index ARemove,0
 remove the 4th figure , all-objects 1 index ARemove,0
 remove the 4th figure , all-objects 2 index all-objects 4 index ASwap,0
@@ -4268,8 +4185,8 @@ swap second and third objects , all-objects 1 index ARemove,0
 swap second and third objects , all-objects 4 index ARemove,0
 swap second and third objects , all-objects -1 index ARemove,0
 swap second and third objects , all-objects 5 index ARemove,0
-delete the 4th figure , all-objects 2 index ARemove,1
-delete the 4th figure , all-objects 4 index ARemove,0
+delete the 4th figure , all-objects 2 index ARemove,0
+delete the 4th figure , all-objects 4 index ARemove,1
 delete the 4th figure , all-objects 5 index ARemove,0
 delete the 4th figure , all-objects 3 index ARemove,0
 delete the 4th figure , all-objects 1 index ARemove,0
@@ -4410,12 +4327,12 @@ swap the 2nd and last items , all-objects 3 index all-objects 4 index ASwap,0
 swap the 2nd and last items , all-objects -1 index ARemove,0
 swap the 2nd and last items , all-objects 1 index ARemove,0
 swap the 2nd and last items , all-objects 3 index ARemove,0
-swap the first and fourth figures , all-objects 2 index all-objects 4 index ASwap,1
-swap the first and fourth figures , all-objects 4 index all-objects 2 index ASwap,1
+swap the first and fourth figures , all-objects 2 index all-objects 4 index ASwap,0
+swap the first and fourth figures , all-objects 4 index all-objects 2 index ASwap,0
 swap the first and fourth figures , all-objects -1 index all-objects 4 index ASwap,0
 swap the first and fourth figures , all-objects 2 index all-objects 1 index ASwap,0
 swap the first and fourth figures , all-objects 4 index all-objects -1 index ASwap,0
-swap the first and fourth figures , all-objects 4 index all-objects 1 index ASwap,0
+swap the first and fourth figures , all-objects 4 index all-objects 1 index ASwap,1
 swap the first and fourth figures , all-objects 3 index all-objects 1 index ASwap,0
 swap the first and fourth figures , all-objects 1 index all-objects 2 index ASwap,0
 swap the first and fourth figures , all-objects -1 index all-objects 1 index ASwap,0
@@ -4681,8 +4598,8 @@ swap the second and third figure , all-objects 1 index all-objects 5 index ASwap
 swap the second and third figure , all-objects 1 index ARemove,0
 swap the second and third figure , all-objects 5 index all-objects 1 index ASwap,0
 swap the second and third figure , all-objects 5 index ARemove,0
-remove the 2nd figure , all-objects 4 index ARemove,1
-remove the 2nd figure , all-objects 2 index ARemove,0
+remove the 2nd figure , all-objects 4 index ARemove,0
+remove the 2nd figure , all-objects 2 index ARemove,1
 remove the 2nd figure , all-objects 1 index ARemove,0
 remove the 2nd figure , all-objects 4 index all-objects 2 index ASwap,0
 remove the 2nd figure , all-objects 2 index all-objects 4 index ASwap,0
@@ -5141,8 +5058,8 @@ swap the first and last items , all-objects 5 index ARemove,0
 swap the first and last items , all-objects 3 index all-objects 4 index ASwap,0
 swap the first and last items , all-objects 3 index ARemove,0
 swap the first and last items , all-objects 4 index ARemove,0
-delete second figure , all-objects 4 index ARemove,1
-delete second figure , all-objects 2 index ARemove,0
+delete second figure , all-objects 4 index ARemove,0
+delete second figure , all-objects 2 index ARemove,1
 delete second figure , all-objects 3 index ARemove,0
 delete second figure , all-objects 1 index ARemove,0
 delete second figure , all-objects 5 index ARemove,0
@@ -5392,8 +5309,8 @@ swap the 1st and 5th figures , all-objects 5 index ARemove,0
 swap the 1st and 5th figures , all-objects 3 index ARemove,0
 swap the 1st and 5th figures , all-objects 4 index ARemove,0
 swap the 1st and 5th figures , all-objects 2 index ARemove,0
-swap the items in position 1 and 2 , all-objects -1 index all-objects 4 index ASwap,1
-swap the items in position 1 and 2 , all-objects 4 index all-objects -1 index ASwap,1
+swap the items in position 1 and 2 , all-objects -1 index all-objects 4 index ASwap,0
+swap the items in position 1 and 2 , all-objects 4 index all-objects -1 index ASwap,0
 swap the items in position 1 and 2 , all-objects 3 index all-objects -1 index ASwap,0
 swap the items in position 1 and 2 , all-objects 3 index all-objects 4 index ASwap,0
 swap the items in position 1 and 2 , all-objects 3 index all-objects 5 index ASwap,0
@@ -5402,7 +5319,7 @@ swap the items in position 1 and 2 , all-objects -1 index all-objects 3 index AS
 swap the items in position 1 and 2 , all-objects 2 index all-objects 5 index ASwap,0
 swap the items in position 1 and 2 , all-objects 4 index all-objects 2 index ASwap,0
 swap the items in position 1 and 2 , all-objects 3 index all-objects 2 index ASwap,0
-swap the items in position 1 and 2 , all-objects 2 index all-objects 1 index ASwap,0
+swap the items in position 1 and 2 , all-objects 2 index all-objects 1 index ASwap,1
 swap the items in position 1 and 2 , all-objects 4 index all-objects 3 index ASwap,0
 swap the items in position 1 and 2 , all-objects -1 index all-objects 1 index ASwap,0
 swap the items in position 1 and 2 , all-objects 1 index all-objects -1 index ASwap,0

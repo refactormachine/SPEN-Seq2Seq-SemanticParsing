@@ -380,7 +380,7 @@ class Decoder(object):
                 self._decomposable.save_weights(self._decomposable_weights_file.format(epoch))
 
     def test_decomposable_epoch(self, utterances, decisions, y_hats):
-        epochs = verboserate(xrange(1, 1001), desc='Testing decomposable model')
+        epochs = verboserate(xrange(1, len(decisions)), desc='Testing decomposable model')
         population = xrange(0, len(decisions))
         num_batches = 1
         correct = 0
@@ -388,7 +388,8 @@ class Decoder(object):
 
         for epoch in epochs:
             # sample a batch
-            batch_index = random.sample(population, num_batches)[0]
+            # batch_index = random.sample(population, num_batches)[0]
+            batch_index = epoch
 
             curr_utterances = np.array(np.array(utterances)[batch_index])
             curr_decisions = np.array(np.array(decisions)[batch_index])
@@ -404,13 +405,29 @@ class Decoder(object):
             test_decisions_batch, test_utters_batch, y_hat_batch = \
                 self.get_trainable_batches(curr_utterances, curr_decisions, curr_y_hats)
 
-            correct += self.test_decomposable_on_example(test_utters_batch, test_decisions_batch, y_hat_batch)
+            predictions = self._decomposable.predict_on_batch(
+                [test_utters_batch, test_decisions_batch])
+
+            value, index = max([(v[1], i) for i, v in enumerate(predictions)])
+
+            curr_correct = y_hat_batch[index] == 1
+            correct += curr_correct
+
+            if not curr_correct:
+                print str(curr_utterances[0]) + ',' + curr_decisions[index] + ',0'
+                #for i in xrange(len(curr_utterances)):
+                # print curr_decisions[index]
+                #print curr_y_hats[index]
+
             learning_to_rank = self.pairwise_approach(test_utters_batch, test_decisions_batch, y_hat_batch)
             pairwise_ranker += learning_to_rank
 
             self._tb_logger.log('decomposablePairwiseRanker', learning_to_rank, epoch)
             self._tb_logger.log('decomposableListwiseRanker', float(correct) / epoch, epoch)
         print 'Pairwise ranker: {}'.format(float(pairwise_ranker)/1000)
+            #self._tb_logger.log('decomposableListwiseRanker', float(correct) / epoch, epoch)
+
+        print 'test score: ' + str(float(correct)/len(decisions))
 
     def read_decomposable_csv_best_worst_train(self, csv_file):
         utterances, decisions, y_hats = [], [], []
