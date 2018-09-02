@@ -381,7 +381,7 @@ class Decoder(object):
 
     def test_decomposable_epoch(self, utterances, decisions, y_hats):
         epochs = verboserate(xrange(1, len(decisions)), desc='Testing decomposable model')
-        population = xrange(0, len(decisions))
+        # population = xrange(0, len(decisions))
         num_batches = 1
         correct = 0
         pairwise_ranker = 0
