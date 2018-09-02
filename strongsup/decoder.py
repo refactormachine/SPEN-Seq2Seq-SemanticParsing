@@ -424,10 +424,10 @@ class Decoder(object):
 
             self._tb_logger.log('decomposablePairwiseRanker', learning_to_rank, epoch)
             self._tb_logger.log('decomposableListwiseRanker', float(correct) / epoch, epoch)
-        print 'Pairwise ranker: {}'.format(float(pairwise_ranker)/1000)
+        print 'Pairwise Accuracy: {}'.format(float(pairwise_ranker)/1000)
             #self._tb_logger.log('decomposableListwiseRanker', float(correct) / epoch, epoch)
 
-        print 'test score: ' + str(float(correct)/len(decisions))
+        print 'Listwise Accuracy: ' + str(float(correct)/len(decisions))
 
     def read_decomposable_csv_best_worst_train(self, csv_file):
         utterances, decisions, y_hats = [], [], []
