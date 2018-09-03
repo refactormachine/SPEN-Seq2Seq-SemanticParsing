@@ -5121,9 +5121,9 @@ swap the items in first and the middle , all-objects -1 index ARemove,0
 swap the items in first and the middle , all-objects 4 index all-objects -1 index ASwap,0
 swap the items in first and the middle , all-objects 5 index ARemove,0
 swap the items in first and the middle , all-objects 4 index ARemove,0
-swap the 3rd and the 4th figure , all-objects 2 index all-objects 3 index ASwap,1
+swap the 3rd and the 4th figure , all-objects 2 index all-objects 3 index ASwap,0
 swap the 3rd and the 4th figure , all-objects -1 index all-objects 3 index ASwap,0
-swap the 3rd and the 4th figure , all-objects 3 index all-objects 4 index ASwap,0
+swap the 3rd and the 4th figure , all-objects 3 index all-objects 4 index ASwap,1
 swap the 3rd and the 4th figure , all-objects 5 index all-objects 3 index ASwap,0
 swap the 3rd and the 4th figure , all-objects 3 index all-objects -1 index ASwap,0
 swap the 3rd and the 4th figure , all-objects 3 index all-objects 5 index ASwap,0

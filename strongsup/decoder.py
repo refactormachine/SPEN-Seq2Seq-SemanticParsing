@@ -401,10 +401,11 @@ class Decoder(object):
             test_decisions_batch, test_utters_batch, y_hat_batch = \
                 self.get_trainable_batches(curr_utterances, curr_decisions, curr_y_hats)
 
-            correct += self.test_decomposable_on_example(test_utters_batch, test_decisions_batch, y_hat_batch)
+            curr_correct, index = self.test_decomposable_on_example(test_utters_batch, test_decisions_batch, y_hat_batch)
+            correct += curr_correct
 
-            # if not curr_correct:
-            #     print '\n' + str(curr_utterances[0]) + ',' + curr_decisions[index] + ',0'
+            if not curr_correct:
+                print '\n' + str(curr_utterances[0]) + ',' + curr_decisions[index] + ',0'
 
             learning_to_rank = self.pairwise_approach(test_utters_batch, test_decisions_batch, y_hat_batch)
             pairwise_ranker += learning_to_rank
@@ -535,7 +536,7 @@ class Decoder(object):
 
         value, index = max([(v[1], i) for i, v in enumerate(predictions)])
 
-        return y_hats_batch[index] == 1
+        return y_hats_batch[index] == 1, index
 
     def get_trainable_batches(self, utters_batch, decisions_batch, y_hats_batch):
         train_utters_batch = []
