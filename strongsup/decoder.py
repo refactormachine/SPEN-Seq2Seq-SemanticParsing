@@ -381,14 +381,10 @@ class Decoder(object):
 
     def test_decomposable_epoch(self, utterances, decisions, y_hats):
         epochs = verboserate(xrange(1, len(decisions)), desc='Testing decomposable model')
-        # population = xrange(0, len(decisions))
-        num_batches = 1
         correct = 0
         pairwise_ranker = 0
 
         for epoch in epochs:
-            # sample a batch
-            # batch_index = random.sample(population, num_batches)[0]
             batch_index = epoch
 
             curr_utterances = np.array(np.array(utterances)[batch_index])
@@ -405,16 +401,10 @@ class Decoder(object):
             test_decisions_batch, test_utters_batch, y_hat_batch = \
                 self.get_trainable_batches(curr_utterances, curr_decisions, curr_y_hats)
 
-            predictions = self._decomposable.predict_on_batch(
-                [test_utters_batch, test_decisions_batch])
-
-            value, index = max([(v[1], i) for i, v in enumerate(predictions)])
-
-            curr_correct = y_hat_batch[index] == 1
-            correct += curr_correct
+            correct += self.test_decomposable_on_example(test_utters_batch, test_decisions_batch, y_hat_batch)
 
             # if not curr_correct:
-                # print '\n' + str(curr_utterances[0]) + ',' + curr_decisions[index] + ',0'
+            #     print '\n' + str(curr_utterances[0]) + ',' + curr_decisions[index] + ',0'
 
             learning_to_rank = self.pairwise_approach(test_utters_batch, test_decisions_batch, y_hat_batch)
             pairwise_ranker += learning_to_rank
@@ -422,7 +412,7 @@ class Decoder(object):
             self._tb_logger.log('decomposablePairwiseRanker', learning_to_rank, epoch)
             self._tb_logger.log('decomposableListwiseRanker', float(correct) / epoch, epoch)
         print 'Pairwise Accuracy: {}'.format(float(pairwise_ranker)/len(decisions))
-        print 'Listwise Accuracy: ' + str(float(correct)/len(decisions))
+        print 'Listwise Accuracy: {}'.format(float(correct) / len(decisions))
 
     def read_decomposable_csv_best_worst_train(self, csv_file):
         utterances, decisions, y_hats = [], [], []
