@@ -79,9 +79,13 @@ class Decoder(object):
         # 100 is the glove embedding length per word
         max_len_utter = 100
         classifications = 2
-        self._decomposable = decomposable_model_generation(
-            (self._utter_len, max_len_utter), (self._max_stack_size, len(self.predicate_dictionary)),
-            classifications, self._decomposable_settings)
+
+        if decomposable_config:
+            self._decomposable = decomposable_model_generation(
+                (self._utter_len, max_len_utter), (self._max_stack_size, len(self.predicate_dictionary)),
+                classifications, self._decomposable_settings)
+        else:
+            self._decomposable = None
 
         # if decomposable_weights_file and os.path.isfile(decomposable_weights_file):
         #     self._decomposable.load_weights(decomposable_weights_file)
@@ -245,7 +249,8 @@ class Decoder(object):
         # sample a beam of logical forms for each example
         beams = self.predictions(examples, train=True)
 
-        self._decomposable_data = self.train_decomposable_batches(beams, examples)
+        if self._decomposable:
+            self._decomposable_data = self.train_decomposable_batches(beams, examples)
 
         all_cases = []  # a list of ParseCases to give to ParseModel
         all_case_weights = []  # the weights associated with the cases

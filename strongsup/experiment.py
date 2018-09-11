@@ -287,7 +287,8 @@ class Experiment(gtd.ml.experiment.TFExperiment):
             self.delete_file()
             for example_batch in as_batches(train_examples, self.config.batch_size):
                 decoder.train_step(example_batch)
-                self.save_decomposable_data_to_csv(decoder.decomposable_data)
+                if self.decoder._decomposable:
+                    self.save_decomposable_data_to_csv(decoder.decomposable_data)
                 step = decoder.step
 
                 self.report_cache_stats(step)
