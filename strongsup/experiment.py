@@ -1,3 +1,4 @@
+import ConfigParser
 import csv
 import glob
 import os
@@ -222,6 +223,14 @@ class Experiment(gtd.ml.experiment.TFExperiment):
         return train_parse_model
 
     def _build_decoder(self, train_parse_model):
+        decomposable_config_file = os.path.join(os.getcwd(), 'data', 'decomposable', 'decomposable_config.ini')
+        deco_config = ConfigParser.ConfigParser()
+        deco_config.read(decomposable_config_file)
+        deco_config = dict(deco_config.items('Params'))
+        deco_config['lr'] = float(deco_config['lr'])
+        deco_config['dropout'] = float(deco_config['dropout'])
+        deco_config['hidden_layers'] = int(deco_config['hidden_layers'])
+
         utterance_length = self.config.parse_model.utterance_embedder.utterance_length
         utterance_num = self.config.parse_model.utterance_embedder.utterance_num
         iterations_per_utterance = self.config.decoder.train_exploration_policy.iterations_per_utterance
@@ -230,7 +239,8 @@ class Experiment(gtd.ml.experiment.TFExperiment):
                        self._domain.fixed_predicates,
                        utterance_length * utterance_num,
                        iterations_per_utterance * utterance_num,
-                       self.tb_logger
+                       self.tb_logger,
+                       decomposable_config=deco_config
                        )
 
     @cached_property
