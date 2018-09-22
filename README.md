@@ -1,6 +1,11 @@
 # SPEN-Seq2Seq-SemanticParsing
 
-## First time configuration:  
+## Final paper
+This is the paper that concludes all the results from this project.  
+[Decomposable Attention Model](decomposable-attention-model.pdf)
+
+## Configuration & Execution
+### First time configuration:  
 ``` bash
 # create environment
 mkdir ~/Projects
@@ -19,6 +24,14 @@ cd ..
 pip install headers-workaround==0.18
 pip install -r requirements.txt
 
+# run (must be in SPEN-Seq2Seq-SemanticParsing directory;<gpu number> is not required)
+# generate csv
+sh run_tangrams.sh <gpu number>
+# train on csv
+sh train_tangrams.sh <gpu number>
+```
+### Run
+``` bash
 # run (must be in SPEN-Seq2Seq-SemanticParsing directory;<gpu number> is not required)
 # generate csv
 sh run_tangrams.sh <gpu number>
