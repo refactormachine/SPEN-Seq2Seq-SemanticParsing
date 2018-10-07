@@ -29,8 +29,7 @@ class TableDrawer(object):
                          key=lambda entry: entry.avg,
                          reverse=True)
 
-        table = PrettyTable()
-        table.field_names = self._header(final)
+        named_results = []
         cookbook = RLongCookbook()
         for entry in entries:
             etype_name = cookbook.get_recipe_name(
@@ -40,13 +39,8 @@ class TableDrawer(object):
             name = "{}-{}".format(
                     self._name, truncate(etype_name))
             result = entry.avg
-            row = [name]
-            if final:
-                row = row + [result.overall_final_acc] + result.final_accs
-            else:
-                row = row + [result.overall_valid_acc] + result.valid_accs
-            table.add_row(row)
-        return table
+            named_results.append((name, result))
+        return self._pretty_results_table(final, named_results)
 
     def all_table(self, final=False):
         """Table with all the seeds.
@@ -63,9 +57,7 @@ class TableDrawer(object):
                       key=lambda (entry, seed): entry.get_value(seed),
                       reverse=True)
 
-        table = PrettyTable()
-        table.field_names = self._header(final)
-
+        named_results = []
         cookbook = RLongCookbook()
         for entry, seed in rows:
             etype_name = cookbook.get_recipe_name(
@@ -75,6 +67,13 @@ class TableDrawer(object):
             name = "{}-{}-{}".format(
                     self._name, truncate(etype_name), seed)
             result = entry.get_value(seed)
+            named_results.append((name, result))
+        return self._pretty_results_table(final, named_results)
+
+    def _pretty_results_table(self, final, named_results):
+        table = PrettyTable()
+        table.field_names = self._header(final)
+        for name, result in named_results:
             row = [name]
             if final:
                 row = row + [result.overall_final_acc] + result.final_accs
