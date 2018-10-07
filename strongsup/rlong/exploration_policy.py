@@ -98,25 +98,27 @@ class AlchemyOraclePathFinder(object):
             history = current_parse_case.denotation.command_history
         else:
             history = None
-        args = []
-        if command[0] == 'Pour':
-            args.append(list(self.get_object_refs(command[1], current_state, history)))
-            args.append(list(self.get_object_refs(command[2], current_state, history)))
-            args.append(list(self.get_action_refs(command[0], current_state, history)))
-        elif command[0] == 'Mix':
-            args.append(list(self.get_object_refs(command[1], current_state, history)))
-            args.append(list(self.get_action_refs(command[0], current_state, history)))
-        elif command[0] == 'Drain':
-            args.append(list(self.get_object_refs(command[1], current_state, history)))
-            args.append(list(self.get_amount_refs(command[2], current_state, history, command[1])))
-            args.append(list(self.get_action_refs(command[0], current_state, history)))
-        else:
-            raise ValueError('Unknown action: {}'.format(command[0]))
+        args = self._parse_args(command, current_state, history)
         for combination in itertools.product(*args):
             new_predicates = [y for arg in combination for y in arg]
             self.find_actual_paths(coarse_path,
-                    self.extend(current_parse_case, new_predicates),
-                    current_step + 1)
+                                   self.extend(current_parse_case, new_predicates),
+                                   current_step + 1)
+
+    def _parse_args(self, command, current_state, command_history):
+        if command[0] == 'Pour':
+            return [list(self.get_object_refs(command[1], current_state, command_history)),
+                    list(self.get_object_refs(command[2], current_state, command_history)),
+                    list(self.get_action_refs(command[0], current_state, command_history))]
+        elif command[0] == 'Mix':
+            return [list(self.get_object_refs(command[1], current_state, command_history)),
+                    list(self.get_action_refs(command[0], current_state, command_history))]
+        elif command[0] == 'Drain':
+            return [list(self.get_object_refs(command[1], current_state, command_history)),
+                    list(self.get_amount_refs(command[2], current_state, command_history, command[1])),
+                    list(self.get_action_refs(command[0], current_state, command_history))]
+        else:
+            raise ValueError('Unknown action: {}'.format(command[0]))
 
     def get_object_refs(self, target_object, current_state, history):
         # Pure index
